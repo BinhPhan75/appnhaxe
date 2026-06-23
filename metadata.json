@@ -1,0 +1,6 @@
+{
+  "name": "Quản Lý Nhà Xe - Sơ Đồ Ghế & Định Vị Realtime",
+  "description": "Hệ thống quản lý đặt chỗ, sơ đồ giường nằm, định vị GPS realtime, cảnh báo trả khách trong bán kính 5km và đồng bộ dữ liệu ngoại tuyến (Offline mode).",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
