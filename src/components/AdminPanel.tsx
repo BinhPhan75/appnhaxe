@@ -43,6 +43,9 @@ interface AdminPanelProps {
     driverPhone: string;
     conductorName: string;
     conductorPhone: string;
+    startName?: string;
+    endName?: string;
+    routeType?: string;
   }) => Promise<void>;
 }
 
@@ -53,7 +56,10 @@ const FALLBACK_BUSES: Record<string, any> = {
     driverName: 'Nguyễn Văn Đạt',
     driverPhone: '0901235566',
     conductorName: 'Lê Hoàng Quân',
-    conductorPhone: '0933556677'
+    conductorPhone: '0933556677',
+    startName: 'BX Miền Tây (Sài Gòn)',
+    endName: 'BX Liên Tỉnh Đà Lạt',
+    routeType: 'national_highway'
   },
   'sg-ct': {
     tripId: 'sg-ct',
@@ -61,7 +67,10 @@ const FALLBACK_BUSES: Record<string, any> = {
     driverName: 'Trần Văn Nam',
     driverPhone: '0918765432',
     conductorName: 'Lâm Văn Hải',
-    conductorPhone: '0932112233'
+    conductorPhone: '0932112233',
+    startName: 'BX Miền Tây (Sài Gòn)',
+    endName: 'BX Trung Tâm Cần Thơ',
+    routeType: 'national_highway'
   },
   'sg-nt': {
     tripId: 'sg-nt',
@@ -69,7 +78,10 @@ const FALLBACK_BUSES: Record<string, any> = {
     driverName: 'Lê Quốc Bảo',
     driverPhone: '0905556677',
     conductorName: 'Nguyễn Văn An',
-    conductorPhone: '0914445566'
+    conductorPhone: '0914445566',
+    startName: 'BX Miền Đông (Sài Gòn)',
+    endName: 'BX Phía Nam Nha Trang',
+    routeType: 'national_highway'
   }
 };
 
@@ -77,7 +89,7 @@ export default function AdminPanel({
   buses,
   selectedTripId,
   onSaveBusInfo
-}: AdminPanelProps) {
+ }: AdminPanelProps) {
   const [editingTripId, setEditingTripId] = useState(selectedTripId);
 
   // Local edit states
@@ -86,6 +98,11 @@ export default function AdminPanel({
   const [drPhone, setDrPhone] = useState('');
   const [cond, setCond] = useState('');
   const [condPhone, setCondPhone] = useState('');
+
+  // Sstart, end, and route options configuration states
+  const [startPoint, setStartPoint] = useState('');
+  const [endPoint, setEndPoint] = useState('');
+  const [routeOption, setRouteOption] = useState('national_highway');
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -105,6 +122,9 @@ export default function AdminPanel({
       setDrPhone(activeBus.driverPhone || '');
       setCond(activeBus.conductorName || '');
       setCondPhone(activeBus.conductorPhone || '');
+      setStartPoint(activeBus.startName || (editingTripId === 'sg-nt' ? 'BX Miền Đông (Sài Gòn)' : 'BX Miền Tây (Sài Gòn)'));
+      setEndPoint(activeBus.endName || (editingTripId === 'sg-dl' ? 'BX Liên Tỉnh Đà Lạt' : editingTripId === 'sg-ct' ? 'BX Trung Tâm Cần Thơ' : 'BX Phía Nam Nha Trang'));
+      setRouteOption(activeBus.routeType || 'national_highway');
     }
   }, [editingTripId, buses, selectedTripId]);
 
@@ -143,7 +163,10 @@ export default function AdminPanel({
         driverName: driver,
         driverPhone: drPhone,
         conductorName: cond,
-        conductorPhone: condPhone
+        conductorPhone: condPhone,
+        startName: startPoint,
+        endName: endPoint,
+        routeType: routeOption
       });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -196,8 +219,8 @@ CREATE TABLE passenger_bookings (
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
             <User className="w-5 h-5 text-red-600" />
             <div>
-              <h3 className="font-extrabold text-sm text-slate-800 uppercase tracking-tight">Nhân Viên & Biển Số Xe</h3>
-              <p className="text-[11px] text-slate-400">Thiết lập tài xế, phụ xe, và biển kiểm soát hành trình xe</p>
+              <h3 className="font-extrabold text-sm text-slate-800 uppercase tracking-tight">Hành Trình & Cấu Hình Xe</h3>
+              <p className="text-[11px] text-slate-400">Thiết lập lộ trình đi, bến bãi, lựa chọn tuyến đường, tài xế & phụ xe</p>
             </div>
           </div>
 
@@ -207,12 +230,91 @@ CREATE TABLE passenger_bookings (
               <select
                 value={editingTripId}
                 onChange={(e) => setEditingTripId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-705 text-slate-700 font-extrabold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-750 text-slate-700 font-extrabold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
               >
                 <option value="sg-dl">Sài Gòn - Đà Lạt (Biển 51B)</option>
                 <option value="sg-ct">Sài Gòn - Cần Thơ (Biển 65B)</option>
                 <option value="sg-nt">Sài Gòn - Nha Trang (Biển 79B)</option>
               </select>
+            </div>
+
+            {/* CẤU HÌNH TUYẾN ĐƯỜNG & HÀNH TRÌNH */}
+            <div className="pt-2 pb-1 border-t border-dashed border-slate-100 flex items-center gap-1.5 mt-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-650 bg-red-500"></span>
+              <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Cấu Hình Lộ Trình & Tuyến Xe</h4>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Bến Xuất Phát (Điểm Đi)</label>
+                <input
+                  type="text"
+                  required
+                  value={startPoint}
+                  onChange={(e) => setStartPoint(e.target.value)}
+                  placeholder="Ví dụ: BX Miền Tây (Sài Gòn)"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Bến Đích Đến (Điểm Đến)</label>
+                <input
+                  type="text"
+                  required
+                  value={endPoint}
+                  onChange={(e) => setEndPoint(e.target.value)}
+                  placeholder="Ví dụ: BX Liên Tỉnh Đà Lạt"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Lựa Chọn Tuyến Đường Hành Trình</label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRouteOption('national_highway')}
+                  className={`px-3 py-2 rounded-lg border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    routeOption === 'national_highway'
+                      ? 'bg-red-50 border-red-200 text-red-700 ring-1 ring-red-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 font-bold'
+                  }`}
+                >
+                  <span className="text-sm">🛣️</span>
+                  <span>Quốc Lộ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRouteOption('expressway')}
+                  className={`px-3 py-2 rounded-lg border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    routeOption === 'expressway'
+                      ? 'bg-red-50 border-red-200 text-red-700 ring-1 ring-red-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 font-bold'
+                  }`}
+                >
+                  <span className="text-sm">⚡</span>
+                  <span>Cao Tốc</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRouteOption('other')}
+                  className={`px-3 py-2 rounded-lg border text-xs font-black transition-all flex flex-col items-center justify-center gap-1 cursor-pointer ${
+                    routeOption === 'other'
+                      ? 'bg-red-50 border-red-200 text-red-700 ring-1 ring-red-300'
+                      : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100 font-bold'
+                  }`}
+                >
+                  <span className="text-sm">🌲</span>
+                  <span>Tuyến Khác</span>
+                </button>
+              </div>
+            </div>
+
+            {/* PHƯƠNG TIỆN & NHÂN SỰ */}
+            <div className="pt-3 pb-1 border-t border-dashed border-slate-100 flex items-center gap-1.5 mt-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-650 bg-red-500"></span>
+              <h4 className="text-[11px] font-extrabold text-slate-400 uppercase tracking-wider">Thông Tin Xe & Nhân Viên</h4>
             </div>
 
             <div className="flex flex-col gap-1.5 font-sans">

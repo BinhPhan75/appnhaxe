@@ -105,6 +105,24 @@ export default function App() {
         if (data.conductorPhone) setConductorPhone(data.conductorPhone);
         if (data.buses) setBuses(data.buses);
 
+        // Sync customized route inputs (startName, endName, waypoints, routeType) to selectedTrip state
+        if (data.startName || data.endName || data.waypoints) {
+          setSelectedTrip(prev => {
+            const freshStart = data.startName || prev.startName;
+            const freshEnd = data.endName || prev.endName;
+            const freshType = data.routeType || 'national_highway';
+            const typeLabel = freshType === 'expressway' ? 'Cao Tốc' : freshType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
+            return {
+              ...prev,
+              startName: freshStart,
+              endName: freshEnd,
+              route: `${freshStart} - ${freshEnd}`,
+              name: `${freshStart} - ${freshEnd} (${typeLabel})`,
+              waypoints: data.waypoints || prev.waypoints
+            };
+          });
+        }
+
         // Only pull location from server if we are NOT simulating on this screen
         if (!isSimulating) {
           setCurrentLocation(data.currentLocation);
@@ -640,9 +658,21 @@ export default function App() {
                 onChange={(e) => handleTripChange(e.target.value)}
                 className="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
               >
-                {VIETNAM_ROUTES.map(route => (
-                  <option key={route.id} value={route.id}>{route.name}</option>
-                ))}
+                {buses && buses.length > 0 ? (
+                  buses.map(bus => {
+                    const typeLabel = bus.routeType === 'expressway' ? 'Cao Tốc' : bus.routeType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
+                    const labelName = bus.startName && bus.endName 
+                      ? `${bus.startName} - ${bus.endName} (${typeLabel})`
+                      : VIETNAM_ROUTES.find(r => r.id === bus.tripId)?.name || bus.tripId;
+                    return (
+                      <option key={bus.tripId} value={bus.tripId}>{labelName}</option>
+                    );
+                  })
+                ) : (
+                  VIETNAM_ROUTES.map(route => (
+                    <option key={route.id} value={route.id}>{route.name}</option>
+                  ))
+                )}
               </select>
             </div>
 

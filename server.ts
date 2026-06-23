@@ -2,7 +2,7 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
-import { VIETNAM_ROUTES, getPositionOnRoute } from './src/utils/mockData';
+import { VIETNAM_ROUTES, getPositionOnRoute, getDistanceKm } from './src/utils/mockData';
 
 const app = express();
 const PORT = 3000;
@@ -58,6 +58,149 @@ interface SavedBerth {
   passenger?: SavedPassenger;
 }
 
+// Dynamic routing waypoints generator based on user selections in Admin Panel
+function generateWaypointsByRoute(
+  tripId: string,
+  startName: string,
+  endName: string,
+  routeType: string
+): any[] {
+  let coordsList: { name: string; coords: { lat: number; lng: number } }[] = [];
+
+  const startCoords = tripId === 'sg-nt' 
+    ? { lat: 10.8142, lng: 106.7126 } // BX Miền Đông
+    : { lat: 10.7494, lng: 106.6171 }; // BX Miền Tây
+
+  const endCoords = tripId === 'sg-dl'
+    ? { lat: 11.9333, lng: 108.4503 } // Đà Lạt
+    : tripId === 'sg-ct'
+    ? { lat: 10.0152, lng: 105.7487 } // Cần Thơ
+    : { lat: 12.2224, lng: 109.1672 }; // Nha Trang
+
+  if (tripId === 'sg-dl') {
+    if (routeType === 'expressway') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Trạm Thu Phí Cao Tốc LT-DG', coords: { lat: 10.8123, lng: 106.8234 } },
+        { name: 'Trạm Dừng Chân Cao Tốc Phú Túc', coords: { lat: 11.1124, lng: 107.2845 } },
+        { name: 'Đường Cao Tốc Dầu Giây Liên Khương', coords: { lat: 11.4589, lng: 107.7289 } },
+        { name: 'Nút Giao Cao Tốc Liên Khương', coords: { lat: 11.7233, lng: 108.3245 } },
+        { name: 'Trạm Thu Phí Định An', coords: { lat: 11.8415, lng: 108.4321 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else if (routeType === 'other') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Đường Tỉnh ĐT.763', coords: { lat: 10.9984, lng: 107.0512 } },
+        { name: 'Đèo Tà Pứa (Lâm Đồng)', coords: { lat: 11.3855, lng: 107.5944 } },
+        { name: 'Trạm dừng chân Đạ Huoai', coords: { lat: 11.4123, lng: 107.6543 } },
+        { name: 'Nhánh Hướng Đèo Prenn Cổ Điển', coords: { lat: 11.9056, lng: 108.4412 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else { // national_highway
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Trạm Mai Chí Thọ (Quận 2)', coords: { lat: 10.7932, lng: 106.7454 } },
+        { name: 'Ngã Ba Dầu Giây', coords: { lat: 10.9572, lng: 107.1952 } },
+        { name: 'Trạm Định Quán', coords: { lat: 11.2062, lng: 107.3601 } },
+        { name: 'Chân Đèo Bảo Lộc', coords: { lat: 11.4589, lng: 107.7289 } },
+        { name: 'Văn Phòng Bảo Lộc', coords: { lat: 11.5434, lng: 107.8031 } },
+        { name: 'Ngã Ba Di Linh', coords: { lat: 11.5833, lng: 108.0833 } },
+        { name: 'Sân Bay Liên Khương (Đức Trọng)', coords: { lat: 11.7513, lng: 108.3711 } },
+        { name: 'Trạm Thu Phí Định An', coords: { lat: 11.8415, lng: 108.4321 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    }
+  } else if (tripId === 'sg-ct') {
+    if (routeType === 'expressway') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Vào Cao Tốc Trung Lương (Bến Lức)', coords: { lat: 10.6405, lng: 106.4715 } },
+        { name: 'Trạm Dừng Chân Cao Tốc Châu Thành', coords: { lat: 10.4215, lng: 106.3412 } },
+        { name: 'Nút Giao Cao Tốc Mỹ Thuận', coords: { lat: 10.2741, lng: 105.9529 } },
+        { name: 'Cao Tốc Mỹ Thuận - Cần Thơ', coords: { lat: 10.0987, lng: 105.8112 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else if (routeType === 'other') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Đường Tỉnh ĐT.824 (Đức Hòa)', coords: { lat: 10.8412, lng: 106.4523 } },
+        { name: 'Quốc Lộ 62 (Thạnh Hóa)', coords: { lat: 10.5982, lng: 106.2111 } },
+        { name: 'Đường Tránh Sông Tiền (Cao Lãnh)', coords: { lat: 10.4567, lng: 105.6789 } },
+        { name: 'Bến Phà Cổ Đình An (Vĩnh Long)', coords: { lat: 10.1543, lng: 105.7891 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else { // national_highway
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Trạm Thu Phí Bến Lức', coords: { lat: 10.6405, lng: 106.4715 } },
+        { name: 'Thành Phố Tân An (Long An)', coords: { lat: 10.5333, lng: 106.4000 } },
+        { name: 'Thành Phố Mỹ Tho (Tiền Giang)', coords: { lat: 10.3603, lng: 106.3268 } },
+        { name: 'Trạm dừng chân Cái Bè', coords: { lat: 10.2831, lng: 106.0142 } },
+        { name: 'Cầu Mỹ Thuận (Vĩnh Long)', coords: { lat: 10.2741, lng: 105.9529 } },
+        { name: 'Trạm Bình Minh', coords: { lat: 10.0768, lng: 105.8234 } },
+        { name: 'Cầu Cần Thơ', coords: { lat: 10.0435, lng: 105.7951 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    }
+  } else { // sg-nt
+    if (routeType === 'expressway') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Nút Giao Cao tốc Long Thành - Dầu Giây', coords: { lat: 10.8256, lng: 106.9112 } },
+        { name: 'Cao tốc Dầu Giây - Phan Thiết', coords: { lat: 10.9123, lng: 107.5112 } },
+        { name: 'Cao tốc Phan Thiết - Vĩnh Hảo', coords: { lat: 11.0855, lng: 108.2111 } },
+        { name: 'Cao tốc Vĩnh Hảo - Cam Lâm', coords: { lat: 11.6112, lng: 109.0112 } },
+        { name: 'Nút Giao Cao tốc Cam Lâm - Nha Trang', coords: { lat: 12.1158, lng: 109.1123 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else if (routeType === 'other') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Quốc Lộ 51 (Bà Rịa - Vũng Tàu)', coords: { lat: 10.5123, lng: 107.1512 } },
+        { name: 'Đường Ven Biển Mũi Né (Bình Thuận)', coords: { lat: 10.9412, lng: 108.2112 } },
+        { name: 'Bực Dừa Đồi Cát Trắng (Hòa Thắng)', coords: { lat: 11.0612, lng: 108.3812 } },
+        { name: 'Nhánh Cực Tây Vịnh Cam Ranh', coords: { lat: 11.9543, lng: 109.1054 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else { // national_highway
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Thành Phố Biên Hòa', coords: { lat: 10.9574, lng: 106.8427 } },
+        { name: 'Thành Phố Phan Thiết (Bình Thuận)', coords: { lat: 10.9322, lng: 108.1011 } },
+        { name: 'Phan Rang - Tháp Chàm (Ninh Thuận)', coords: { lat: 11.5684, lng: 108.9904 } },
+        { name: 'Thành Phố Cam Ranh (Khánh Hòa)', coords: { lat: 11.9161, lng: 109.1412 } },
+        { name: 'Bãi Dài Nha Trang', coords: { lat: 12.1158, lng: 109.2014 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    }
+  }
+
+  // Calculate cumulative distances
+  let cumulativeDistance = 0;
+  const resultWaypoints = [
+    {
+      name: coordsList[0].name,
+      coords: coordsList[0].coords,
+      distanceKm: 0
+    }
+  ];
+
+  for (let i = 1; i < coordsList.length; i++) {
+    const prev = coordsList[i - 1].coords;
+    const curr = coordsList[i].coords;
+    const segmentDist = getDistanceKm(prev.lat, prev.lng, curr.lat, curr.lng);
+    cumulativeDistance += Math.round(segmentDist);
+    resultWaypoints.push({
+      name: coordsList[i].name,
+      coords: curr,
+      distanceKm: cumulativeDistance
+    });
+  }
+
+  return resultWaypoints;
+}
+
 // Map of all active buses representing our fleet running different routes simultaneously
 let buses: Record<string, any> = {
   'sg-dl': {
@@ -73,7 +216,11 @@ let buses: Record<string, any> = {
     driverPhone: '0901235566',
     conductorName: 'Lê Hoàng Quân',
     conductorPhone: '0933556677',
-    berths: [] as SavedBerth[]
+    berths: [] as SavedBerth[],
+    startName: 'BX Miền Tây (Sài Gòn)',
+    endName: 'BX Liên Tỉnh Đà Lạt',
+    routeType: 'national_highway',
+    waypoints: VIETNAM_ROUTES[0].waypoints
   },
   'sg-ct': {
     tripId: 'sg-ct',
@@ -88,7 +235,11 @@ let buses: Record<string, any> = {
     driverPhone: '0918765432',
     conductorName: 'Lâm Văn Hải',
     conductorPhone: '0932112233',
-    berths: [] as SavedBerth[]
+    berths: [] as SavedBerth[],
+    startName: 'BX Miền Tây (Sài Gòn)',
+    endName: 'BX Trung Tâm Cần Thơ',
+    routeType: 'national_highway',
+    waypoints: VIETNAM_ROUTES[1].waypoints
   },
   'sg-nt': {
     tripId: 'sg-nt',
@@ -103,7 +254,11 @@ let buses: Record<string, any> = {
     driverPhone: '0905556677',
     conductorName: 'Nguyễn Văn An',
     conductorPhone: '0914445566',
-    berths: [] as SavedBerth[]
+    berths: [] as SavedBerth[],
+    startName: 'BX Miền Đông (Sài Gòn)',
+    endName: 'BX Phía Nam Nha Trang',
+    routeType: 'national_highway',
+    waypoints: VIETNAM_ROUTES[2].waypoints
   }
 };
 
@@ -565,7 +720,19 @@ app.get('/api/customer-logs', async (req, res) => {
 
 // POST: Save driver name, conductor name, license plate, etc.
 app.post('/api/bus-info', (req, res) => {
-  const { licensePlate, driverName, driverPhone, conductorName, conductorPhone, speed, isOffline, tripId } = req.body;
+  const { 
+    licensePlate, 
+    driverName, 
+    driverPhone, 
+    conductorName, 
+    conductorPhone, 
+    speed, 
+    isOffline, 
+    tripId,
+    startName,
+    endName,
+    routeType
+  } = req.body;
   const targetTripId = tripId || busState.tripId;
   const activeBus = buses[targetTripId] || busState;
 
@@ -576,6 +743,23 @@ app.post('/api/bus-info', (req, res) => {
   if (conductorPhone !== undefined) activeBus.conductorPhone = conductorPhone;
   if (speed !== undefined) activeBus.speed = Number(speed);
   if (isOffline !== undefined) activeBus.isOffline = !!isOffline;
+
+  // Cấu hình tuyến xe: Điểm xuất phát, Điểm đến, Loại tuyến đường
+  if (startName !== undefined) activeBus.startName = startName;
+  if (endName !== undefined) activeBus.endName = endName;
+  if (routeType !== undefined) activeBus.routeType = routeType;
+
+  if (startName !== undefined || endName !== undefined || routeType !== undefined) {
+    const fStart = activeBus.startName || (targetTripId === 'sg-nt' ? 'BX Miền Đông (Sài Gòn)' : 'BX Miền Tây (Sài Gòn)');
+    const fEnd = activeBus.endName || (targetTripId === 'sg-dl' ? 'BX Liên Tỉnh Đà Lạt' : targetTripId === 'sg-ct' ? 'BX Trung Tâm Cần Thơ' : 'BX Phía Nam Nha Trang');
+    const fRouteType = activeBus.routeType || 'national_highway';
+    activeBus.waypoints = generateWaypointsByRoute(targetTripId, fStart, fEnd, fRouteType);
+    activeBus.simulationProgress = 0; // Reset progress when route config changes
+    if (activeBus.waypoints && activeBus.waypoints.length > 0) {
+      activeBus.currentLocation = activeBus.waypoints[0].coords; // Reset bus location to new starting coordinates
+    }
+  }
+
   res.json({ success: true, state: activeBus, buses: Object.values(buses) });
 });
 
