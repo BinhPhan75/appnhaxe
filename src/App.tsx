@@ -105,7 +105,7 @@ export default function App() {
         if (data.conductorPhone) setConductorPhone(data.conductorPhone);
         if (data.buses) setBuses(data.buses);
 
-        // Sync customized route inputs (startName, endName, waypoints, routeType) to selectedTrip state
+        // Sync customized route inputs (startName, endName, waypoints, routeType, status) to selectedTrip state
         if (data.startName || data.endName || data.waypoints) {
           setSelectedTrip(prev => {
             const freshStart = data.startName || prev.startName;
@@ -118,7 +118,8 @@ export default function App() {
               endName: freshEnd,
               route: `${freshStart} - ${freshEnd}`,
               name: `${freshStart} - ${freshEnd} (${typeLabel})`,
-              waypoints: data.waypoints || prev.waypoints
+              waypoints: data.waypoints || prev.waypoints,
+              status: data.status || 'active'
             };
           });
         }
@@ -348,6 +349,9 @@ export default function App() {
     startName?: string;
     endName?: string;
     routeType?: string;
+    startCoords?: { lat: number; lng: number };
+    endCoords?: { lat: number; lng: number };
+    status?: 'active' | 'inactive';
   }) => {
     if (info.tripId === selectedTrip.id) {
       setLicensePlate(info.licensePlate);
@@ -356,7 +360,7 @@ export default function App() {
       setConductorName(info.conductorName);
       setConductorPhone(info.conductorPhone);
       
-      if (info.startName || info.endName || info.routeType) {
+      if (info.startName || info.endName || info.routeType || info.status) {
         setSelectedTrip(prev => {
           const freshStart = info.startName || prev.startName;
           const freshEnd = info.endName || prev.endName;
@@ -368,7 +372,8 @@ export default function App() {
             endName: freshEnd,
             route: `${freshStart} - ${freshEnd}`,
             name: `${freshStart} - ${freshEnd} (${typeLabel})`,
-            routeType: freshType
+            routeType: freshType,
+            status: info.status || prev.status
           };
         });
       }
@@ -399,7 +404,8 @@ export default function App() {
               endName: b.endName || 'Bến đích đến',
               startCoords: b.waypoints && b.waypoints.length > 0 ? b.waypoints[0].coords : { lat: 10.7494, lng: 106.6171 },
               endCoords: b.waypoints && b.waypoints.length > 0 ? b.waypoints[b.waypoints.length - 1].coords : { lat: 11.9333, lng: 108.4503 },
-              waypoints: b.waypoints || []
+              waypoints: b.waypoints || [],
+              status: b.status || 'active'
             });
             setCurrentLocation(b.currentLocation || { lat: 10.7494, lng: 106.6171 });
             setSimulationProgress(b.simulationProgress || 0);
@@ -733,6 +739,13 @@ export default function App() {
         </div>
       )}
 
+      {selectedTrip.status === 'inactive' && (
+        <div className="bg-amber-100 text-amber-900 border-b border-amber-200 px-5 py-2.5 text-center text-xs font-black flex items-center justify-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <span>Hành trình này hiện ĐANG CHỜ HOẠT ĐỘNG (Lưu trữ dự phòng). Sắp xếp bến xe, tài xế chính và bấm "Kích hoạt" trong mục Cấu hình xe để khởi chạy tuyến!</span>
+        </div>
+      )}
+
       {/* Main Content Workspace Layout */}
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 flex flex-col gap-6">
         
@@ -751,9 +764,12 @@ export default function App() {
                 {buses && buses.length > 0 ? (
                   buses.map(bus => {
                     const typeLabel = bus.routeType === 'expressway' ? 'Cao Tốc' : bus.routeType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
-                    const labelName = bus.startName && bus.endName 
+                    let labelName = bus.startName && bus.endName 
                       ? `${bus.startName} - ${bus.endName} (${typeLabel})`
                       : VIETNAM_ROUTES.find(r => r.id === bus.tripId)?.name || bus.tripId;
+                    if (bus.status === 'inactive') {
+                      labelName = `⚠️ [Chờ chạy] ${labelName}`;
+                    }
                     return (
                       <option key={bus.tripId} value={bus.tripId}>{labelName}</option>
                     );

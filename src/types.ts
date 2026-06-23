@@ -42,6 +42,7 @@ export interface TripConfig {
   startCoords: Coords;
   endCoords: Coords;
   waypoints: Waypoint[];
+  status?: 'active' | 'inactive';
 }
 
 export interface SyncTransaction {
@@ -76,4 +77,5 @@ export interface BusState {
   driverPhone?: string;
   conductorName?: string;
   conductorPhone?: string;
+  status?: 'active' | 'inactive';
 }

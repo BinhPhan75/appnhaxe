@@ -105,12 +105,14 @@ function generateWaypointsByRoute(
   tripId: string,
   startName: string,
   endName: string,
-  routeType: string
+  routeType: string,
+  startCoordsOverride?: { lat: number; lng: number },
+  endCoordsOverride?: { lat: number; lng: number }
 ): any[] {
   let coordsList: { name: string; coords: { lat: number; lng: number } }[] = [];
 
-  const startCoords = resolveCoords(startName, true);
-  const endCoords = resolveCoords(endName, false);
+  const startCoords = startCoordsOverride || resolveCoords(startName, true);
+  const endCoords = endCoordsOverride || resolveCoords(endName, false);
 
   if (tripId === 'sg-dl') {
     if (routeType === 'expressway') {
@@ -283,6 +285,7 @@ let buses: Record<string, any> = {
     startName: 'BX Miền Tây (Sài Gòn)',
     endName: 'BX Liên Tỉnh Đà Lạt',
     routeType: 'national_highway',
+    status: 'active',
     waypoints: VIETNAM_ROUTES[0].waypoints
   },
   'sg-ct': {
@@ -302,6 +305,7 @@ let buses: Record<string, any> = {
     startName: 'BX Miền Tây (Sài Gòn)',
     endName: 'BX Trung Tâm Cần Thơ',
     routeType: 'national_highway',
+    status: 'active',
     waypoints: VIETNAM_ROUTES[1].waypoints
   },
   'sg-nt': {
@@ -321,6 +325,7 @@ let buses: Record<string, any> = {
     startName: 'BX Miền Đông (Sài Gòn)',
     endName: 'BX Phía Nam Nha Trang',
     routeType: 'national_highway',
+    status: 'active',
     waypoints: VIETNAM_ROUTES[2].waypoints
   }
 };
@@ -424,7 +429,7 @@ busState = buses['sg-dl'];
 setInterval(() => {
   Object.values(buses).forEach(bus => {
     // If the bus is simulating and IS NOT the currently selected active bus being edited by conductor
-    if (bus.isSimulating && bus.tripId !== busState.tripId) {
+    if (bus.status !== 'inactive' && bus.isSimulating && bus.tripId !== busState.tripId) {
       let progressStep = 0.4; // gradual speed
       bus.simulationProgress += progressStep;
       if (bus.simulationProgress >= 100) {
@@ -798,7 +803,10 @@ app.post('/api/bus-info', (req, res) => {
     tripId,
     startName,
     endName,
-    routeType
+    routeType,
+    startCoords,
+    endCoords,
+    status
   } = req.body;
   const targetTripId = tripId || busState.tripId;
   let activeBus = buses[targetTripId];
@@ -808,10 +816,10 @@ app.post('/api/bus-info', (req, res) => {
     activeBus = {
       tripId: targetTripId,
       layoutCapacity: 34,
-      currentLocation: { lat: 10.7494, lng: 106.6171 },
-      speed: 60,
-      isSimulating: true,
-      isOffline: false,
+      currentLocation: startCoords || { lat: 10.7494, lng: 106.6171 },
+      speed: status === 'inactive' ? 0 : 60,
+      isSimulating: status !== 'inactive',
+      isOffline: status === 'inactive',
       simulationProgress: 0,
       licensePlate: licensePlate || '51B-000.00',
       driverName: driverName || 'Tài xế mặc định',
@@ -822,11 +830,14 @@ app.post('/api/bus-info', (req, res) => {
       startName: startName || 'BX Miền Tây (Sài Gòn)',
       endName: endName || 'BX Liên Tỉnh Đà Lạt',
       routeType: routeType || 'national_highway',
+      status: status || 'active',
+      startCoords: startCoords,
+      endCoords: endCoords,
       waypoints: []
     };
 
     // Build the dynamic intermediate stations
-    activeBus.waypoints = generateWaypointsByRoute(targetTripId, activeBus.startName, activeBus.endName, activeBus.routeType);
+    activeBus.waypoints = generateWaypointsByRoute(targetTripId, activeBus.startName, activeBus.endName, activeBus.routeType, startCoords, endCoords);
     if (activeBus.waypoints && activeBus.waypoints.length > 0) {
       activeBus.currentLocation = activeBus.waypoints[0].coords;
     }
@@ -850,12 +861,25 @@ app.post('/api/bus-info', (req, res) => {
   if (startName !== undefined) activeBus.startName = startName;
   if (endName !== undefined) activeBus.endName = endName;
   if (routeType !== undefined) activeBus.routeType = routeType;
+  if (startCoords !== undefined) activeBus.startCoords = startCoords;
+  if (endCoords !== undefined) activeBus.endCoords = endCoords;
+  if (status !== undefined) {
+    activeBus.status = status;
+    if (status === 'inactive') {
+      activeBus.isSimulating = false;
+      activeBus.isOffline = true;
+      activeBus.speed = 0;
+    } else {
+      activeBus.isSimulating = true;
+      activeBus.isOffline = false;
+    }
+  }
 
-  if (startName !== undefined || endName !== undefined || routeType !== undefined) {
+  if (startName !== undefined || endName !== undefined || routeType !== undefined || startCoords !== undefined || endCoords !== undefined) {
     const fStart = activeBus.startName || (targetTripId === 'sg-nt' ? 'BX Miền Đông (Sài Gòn)' : 'BX Miền Tây (Sài Gòn)');
     const fEnd = activeBus.endName || (targetTripId === 'sg-dl' ? 'BX Liên Tỉnh Đà Lạt' : targetTripId === 'sg-ct' ? 'BX Trung Tâm Cần Thơ' : 'BX Phía Nam Nha Trang');
     const fRouteType = activeBus.routeType || 'national_highway';
-    activeBus.waypoints = generateWaypointsByRoute(targetTripId, fStart, fEnd, fRouteType);
+    activeBus.waypoints = generateWaypointsByRoute(targetTripId, fStart, fEnd, fRouteType, activeBus.startCoords, activeBus.endCoords);
     activeBus.simulationProgress = 0; // Reset progress when route config changes
     if (activeBus.waypoints && activeBus.waypoints.length > 0) {
       activeBus.currentLocation = activeBus.waypoints[0].coords; // Reset bus location to new starting coordinates
