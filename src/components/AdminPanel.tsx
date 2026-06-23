@@ -34,12 +34,10 @@ interface SupabaseConfig {
 }
 
 interface AdminPanelProps {
-  licensePlate: string;
-  driverName: string;
-  driverPhone: string;
-  conductorName: string;
-  conductorPhone: string;
+  buses: any[];
+  selectedTripId: string;
   onSaveBusInfo: (info: {
+    tripId: string;
     licensePlate: string;
     driverName: string;
     driverPhone: string;
@@ -48,20 +46,46 @@ interface AdminPanelProps {
   }) => Promise<void>;
 }
 
+const FALLBACK_BUSES: Record<string, any> = {
+  'sg-dl': {
+    tripId: 'sg-dl',
+    licensePlate: '51B-222.88',
+    driverName: 'Nguyễn Văn Đạt',
+    driverPhone: '0901235566',
+    conductorName: 'Lê Hoàng Quân',
+    conductorPhone: '0933556677'
+  },
+  'sg-ct': {
+    tripId: 'sg-ct',
+    licensePlate: '65B-111.22',
+    driverName: 'Trần Văn Nam',
+    driverPhone: '0918765432',
+    conductorName: 'Lâm Văn Hải',
+    conductorPhone: '0932112233'
+  },
+  'sg-nt': {
+    tripId: 'sg-nt',
+    licensePlate: '79B-888.99',
+    driverName: 'Lê Quốc Bảo',
+    driverPhone: '0905556677',
+    conductorName: 'Nguyễn Văn An',
+    conductorPhone: '0914445566'
+  }
+};
+
 export default function AdminPanel({
-  licensePlate: initialLicense,
-  driverName: initialDriver,
-  driverPhone: initialDriverPhone,
-  conductorName: initialConductor,
-  conductorPhone: initialConductorPhone,
+  buses,
+  selectedTripId,
   onSaveBusInfo
 }: AdminPanelProps) {
+  const [editingTripId, setEditingTripId] = useState(selectedTripId);
+
   // Local edit states
-  const [plates, setPlates] = useState(initialLicense);
-  const [driver, setDriver] = useState(initialDriver);
-  const [drPhone, setDrPhone] = useState(initialDriverPhone);
-  const [cond, setCond] = useState(initialConductor);
-  const [condPhone, setCondPhone] = useState(initialConductorPhone);
+  const [plates, setPlates] = useState('');
+  const [driver, setDriver] = useState('');
+  const [drPhone, setDrPhone] = useState('');
+  const [cond, setCond] = useState('');
+  const [condPhone, setCondPhone] = useState('');
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -72,14 +96,17 @@ export default function AdminPanel({
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedSql, setCopiedSql] = useState(false);
 
-  // Sync state modifications
+  // Sync state modifications based on route selection
   useEffect(() => {
-    setPlates(initialLicense);
-    setDriver(initialDriver);
-    setDrPhone(initialDriverPhone);
-    setCond(initialConductor);
-    setCondPhone(initialConductorPhone);
-  }, [initialLicense, initialDriver, initialDriverPhone, initialConductor, initialConductorPhone]);
+    const activeBus = (buses && buses.find(b => b.tripId === editingTripId)) || FALLBACK_BUSES[editingTripId] || FALLBACK_BUSES['sg-dl'];
+    if (activeBus) {
+      setPlates(activeBus.licensePlate || '');
+      setDriver(activeBus.driverName || '');
+      setDrPhone(activeBus.driverPhone || '');
+      setCond(activeBus.conductorName || '');
+      setCondPhone(activeBus.conductorPhone || '');
+    }
+  }, [editingTripId, buses, selectedTripId]);
 
   // Load backend details
   const loadAdminData = async () => {
@@ -111,6 +138,7 @@ export default function AdminPanel({
     setSaveSuccess(false);
     try {
       await onSaveBusInfo({
+        tripId: editingTripId,
         licensePlate: plates,
         driverName: driver,
         driverPhone: drPhone,
@@ -175,6 +203,19 @@ CREATE TABLE passenger_bookings (
 
           <form onSubmit={handlePublishInfo} className="space-y-4 mt-4">
             <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Chọn Tuyến Xe Cấu Hình</label>
+              <select
+                value={editingTripId}
+                onChange={(e) => setEditingTripId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-705 text-slate-700 font-extrabold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+              >
+                <option value="sg-dl">Sài Gòn - Đà Lạt (Biển 51B)</option>
+                <option value="sg-ct">Sài Gòn - Cần Thơ (Biển 65B)</option>
+                <option value="sg-nt">Sài Gòn - Nha Trang (Biển 79B)</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5 font-sans">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Biển Số Xe (Kiểm Soát)</label>
               <div className="relative">
                 <input

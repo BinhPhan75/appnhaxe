@@ -303,17 +303,20 @@ export default function App() {
   };
 
   const handleSaveBusInfo = async (info: {
+    tripId: string;
     licensePlate: string;
     driverName: string;
     driverPhone: string;
     conductorName: string;
     conductorPhone: string;
   }) => {
-    setLicensePlate(info.licensePlate);
-    setDriverName(info.driverName);
-    setDriverPhone(info.driverPhone);
-    setConductorName(info.conductorName);
-    setConductorPhone(info.conductorPhone);
+    if (info.tripId === selectedTrip.id) {
+      setLicensePlate(info.licensePlate);
+      setDriverName(info.driverName);
+      setDriverPhone(info.driverPhone);
+      setConductorName(info.conductorName);
+      setConductorPhone(info.conductorPhone);
+    }
 
     if (!isOffline) {
       try {
@@ -323,6 +326,7 @@ export default function App() {
           body: JSON.stringify(info)
         });
         playSuccessBeep();
+        fetchStateFromServer();
       } catch (err) {
         console.warn("Could not save bus info to server", err);
       }
@@ -883,11 +887,8 @@ export default function App() {
 
           // Admin panel configuration page
           <AdminPanel
-            licensePlate={licensePlate}
-            driverName={driverName}
-            driverPhone={driverPhone}
-            conductorName={conductorName}
-            conductorPhone={conductorPhone}
+            buses={buses}
+            selectedTripId={selectedTrip.id}
             onSaveBusInfo={handleSaveBusInfo}
           />
 
