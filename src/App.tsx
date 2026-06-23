@@ -218,7 +218,25 @@ export default function App() {
 
   // Route selector or Layout capacity overrides
   const handleTripChange = async (tripId: string) => {
-    const targetTrip = VIETNAM_ROUTES.find(r => r.id === tripId);
+    let targetTrip = VIETNAM_ROUTES.find(r => r.id === tripId);
+    
+    if (!targetTrip && buses) {
+      const b = buses.find(x => x.tripId === tripId);
+      if (b) {
+        const typeLabel = b.routeType === 'expressway' ? 'Cao Tốc' : b.routeType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
+        targetTrip = {
+          id: b.tripId,
+          name: b.startName && b.endName ? `${b.startName} - ${b.endName} (${typeLabel})` : b.tripId,
+          route: `${b.startName} - ${b.endName}`,
+          startName: b.startName || 'Bến xuất phát',
+          endName: b.endName || 'Bến đích đến',
+          startCoords: b.waypoints && b.waypoints.length > 0 ? b.waypoints[0].coords : { lat: 10.7494, lng: 106.6171 },
+          endCoords: b.waypoints && b.waypoints.length > 0 ? b.waypoints[b.waypoints.length - 1].coords : { lat: 11.9333, lng: 108.4503 },
+          waypoints: b.waypoints || []
+        };
+      }
+    }
+
     if (!targetTrip) return;
 
     setSelectedTrip(targetTrip);
@@ -327,6 +345,9 @@ export default function App() {
     driverPhone: string;
     conductorName: string;
     conductorPhone: string;
+    startName?: string;
+    endName?: string;
+    routeType?: string;
   }) => {
     if (info.tripId === selectedTrip.id) {
       setLicensePlate(info.licensePlate);
@@ -334,20 +355,89 @@ export default function App() {
       setDriverPhone(info.driverPhone);
       setConductorName(info.conductorName);
       setConductorPhone(info.conductorPhone);
+      
+      if (info.startName || info.endName || info.routeType) {
+        setSelectedTrip(prev => {
+          const freshStart = info.startName || prev.startName;
+          const freshEnd = info.endName || prev.endName;
+          const freshType = info.routeType || prev.routeType || 'national_highway';
+          const typeLabel = freshType === 'expressway' ? 'Cao Tốc' : freshType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
+          return {
+            ...prev,
+            startName: freshStart,
+            endName: freshEnd,
+            route: `${freshStart} - ${freshEnd}`,
+            name: `${freshStart} - ${freshEnd} (${typeLabel})`,
+            routeType: freshType
+          };
+        });
+      }
     }
 
     if (!isOffline) {
       try {
-        await fetch('/api/bus-info', {
+        const res = await fetch('/api/bus-info', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(info)
         });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.buses) {
+            setBuses(data.buses);
+          }
+
+          // Force update current selected state waypoints if we edited the active route
+          if (info.tripId === selectedTrip.id && data.state) {
+            const b = data.state;
+            const typeLabel = b.routeType === 'expressway' ? 'Cao Tốc' : b.routeType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
+            setSelectedTrip({
+              id: b.tripId,
+              name: b.startName && b.endName ? `${b.startName} - ${b.endName} (${typeLabel})` : b.tripId,
+              route: `${b.startName} - ${b.endName}`,
+              startName: b.startName || 'Bến xuất phát',
+              endName: b.endName || 'Bến đích đến',
+              startCoords: b.waypoints && b.waypoints.length > 0 ? b.waypoints[0].coords : { lat: 10.7494, lng: 106.6171 },
+              endCoords: b.waypoints && b.waypoints.length > 0 ? b.waypoints[b.waypoints.length - 1].coords : { lat: 11.9333, lng: 108.4503 },
+              waypoints: b.waypoints || []
+            });
+            setCurrentLocation(b.currentLocation || { lat: 10.7494, lng: 106.6171 });
+            setSimulationProgress(b.simulationProgress || 0);
+          }
+        }
         playSuccessBeep();
         fetchStateFromServer();
       } catch (err) {
         console.warn("Could not save bus info to server", err);
       }
+    }
+  };
+
+  const handleDeleteTrip = async (tripId: string) => {
+    if (isOffline) return;
+    try {
+      const res = await fetch('/api/bus-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tripId })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.buses) {
+          setBuses(data.buses);
+        }
+        // Move selection if deleted trip was active
+        if (selectedTrip.id === tripId) {
+          const target = data.buses?.[0] || data.state;
+          if (target) {
+            handleTripChange(target.tripId);
+          }
+        }
+        playSuccessBeep();
+        fetchStateFromServer();
+      }
+    } catch (err) {
+      console.warn("Could not delete dynamic route from server", err);
     }
   };
 
@@ -920,6 +1010,8 @@ export default function App() {
             buses={buses}
             selectedTripId={selectedTrip.id}
             onSaveBusInfo={handleSaveBusInfo}
+            onSelectTrip={handleTripChange}
+            onDeleteTrip={handleDeleteTrip}
           />
 
         )}

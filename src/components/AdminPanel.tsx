@@ -47,6 +47,8 @@ interface AdminPanelProps {
     endName?: string;
     routeType?: string;
   }) => Promise<void>;
+  onSelectTrip?: (tripId: string) => void;
+  onDeleteTrip?: (tripId: string) => Promise<void>;
 }
 
 const FALLBACK_BUSES: Record<string, any> = {
@@ -88,9 +90,16 @@ const FALLBACK_BUSES: Record<string, any> = {
 export default function AdminPanel({
   buses,
   selectedTripId,
-  onSaveBusInfo
+  onSaveBusInfo,
+  onSelectTrip,
+  onDeleteTrip
  }: AdminPanelProps) {
   const [editingTripId, setEditingTripId] = useState(selectedTripId);
+
+  // Mode to create dynamic trip
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [newTripId, setNewTripId] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   // Local edit states
   const [plates, setPlates] = useState('');
@@ -115,6 +124,7 @@ export default function AdminPanel({
 
   // Sync state modifications based on route selection
   useEffect(() => {
+    if (isCreatingNew) return;
     const activeBus = (buses && buses.find(b => b.tripId === editingTripId)) || FALLBACK_BUSES[editingTripId] || FALLBACK_BUSES['sg-dl'];
     if (activeBus) {
       setPlates(activeBus.licensePlate || '');
@@ -126,7 +136,7 @@ export default function AdminPanel({
       setEndPoint(activeBus.endName || (editingTripId === 'sg-dl' ? 'BX Liên Tỉnh Đà Lạt' : editingTripId === 'sg-ct' ? 'BX Trung Tâm Cần Thơ' : 'BX Phía Nam Nha Trang'));
       setRouteOption(activeBus.routeType || 'national_highway');
     }
-  }, [editingTripId, buses, selectedTripId]);
+  }, [editingTripId, buses, selectedTripId, isCreatingNew]);
 
   // Load backend details
   const loadAdminData = async () => {
@@ -157,8 +167,12 @@ export default function AdminPanel({
     setSaving(true);
     setSaveSuccess(false);
     try {
+      const activeId = isCreatingNew 
+        ? (`tuyen_${Date.now().toString(36)}`) 
+        : editingTripId;
+
       await onSaveBusInfo({
-        tripId: editingTripId,
+        tripId: activeId,
         licensePlate: plates,
         driverName: driver,
         driverPhone: drPhone,
@@ -169,11 +183,41 @@ export default function AdminPanel({
         routeType: routeOption
       });
       setSaveSuccess(true);
+      
+      if (isCreatingNew) {
+        setIsCreatingNew(false);
+        setEditingTripId(activeId);
+        if (onSelectTrip) {
+          onSelectTrip(activeId);
+        }
+      } else {
+        if (onSelectTrip && activeId === selectedTripId) {
+          onSelectTrip(activeId);
+        }
+      }
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
       console.error(err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteAction = async () => {
+    if (onDeleteTrip) {
+      try {
+        await onDeleteTrip(editingTripId);
+        setShowDeleteConfirm(false);
+        // Find a surviving trip to edit instead
+        const remaining = buses.find(b => b.tripId !== editingTripId);
+        if (remaining) {
+          setEditingTripId(remaining.tripId);
+        } else {
+          setEditingTripId('sg-dl');
+        }
+      } catch (err) {
+        console.warn("Delete error", err);
+      }
     }
   };
 
@@ -226,16 +270,76 @@ CREATE TABLE passenger_bookings (
 
           <form onSubmit={handlePublishInfo} className="space-y-4 mt-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Chọn Tuyến Xe Cấu Hình</label>
-              <select
-                value={editingTripId}
-                onChange={(e) => setEditingTripId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-750 text-slate-700 font-extrabold focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
-              >
-                <option value="sg-dl">Sài Gòn - Đà Lạt (Biển 51B)</option>
-                <option value="sg-ct">Sài Gòn - Cần Thơ (Biển 65B)</option>
-                <option value="sg-nt">Sài Gòn - Nha Trang (Biển 79B)</option>
-              </select>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Chọn Tuyến Xe Cấu Hình / Thêm Mới</label>
+              <div className="flex gap-2">
+                <select
+                  value={isCreatingNew ? 'CREATE_NEW' : editingTripId}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === 'CREATE_NEW') {
+                      setIsCreatingNew(true);
+                      setPlates('51B-123.45');
+                      setDriver('Tài xế bổ sung');
+                      setDrPhone('0901230000');
+                      setCond('Nội bộ nhà xe');
+                      setCondPhone('0933550000');
+                      setStartPoint('');
+                      setEndPoint('');
+                      setRouteOption('national_highway');
+                    } else {
+                      setIsCreatingNew(false);
+                      setEditingTripId(val);
+                    }
+                  }}
+                  className="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                >
+                  <optgroup label="Danh sách tuyến hoạt động">
+                    {buses && buses.length > 0 ? (
+                      buses.map(bus => {
+                        const typeLabel = bus.routeType === 'expressway' ? 'Cao Tốc' : bus.routeType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
+                        const labelText = bus.startName && bus.endName
+                          ? `${bus.startName} - ${bus.endName} (${bus.licensePlate})`
+                          : bus.tripId;
+                        return (
+                          <option key={bus.tripId} value={bus.tripId}>
+                            {labelText}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <option value="sg-dl">Sài Gòn - Đà Lạt (Biển 51B)</option>
+                        <option value="sg-ct">Sài Gòn - Cần Thơ (Biển 65B)</option>
+                        <option value="sg-nt">Sài Gòn - Nha Trang (Biển 79B)</option>
+                      </>
+                    )}
+                  </optgroup>
+                  <optgroup label="Thao tác chức năng">
+                    <option value="CREATE_NEW">➕ Tạo Tuyến Xe Hành Trình Mới...</option>
+                  </optgroup>
+                </select>
+
+                {isCreatingNew && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCreatingNew(false);
+                      setEditingTripId(selectedTripId);
+                    }}
+                    className="px-3 py-2 text-xs font-black bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg text-slate-600 transition-all cursor-pointer"
+                    title="Hủy, quay lại bến chỉnh sửa"
+                  >
+                    Hủy
+                  </button>
+                )}
+              </div>
+
+              {isCreatingNew && (
+                <div className="bg-red-50 text-red-800 text-[11px] font-extrabold rounded-lg px-3 py-2 border border-red-200 flex items-center gap-1.5 mt-1.5">
+                  <span className="w-2 h-2 bg-red-650 bg-red-500 rounded-full animate-ping"></span>
+                  <span>ĐANG TẠO TUYẾN MỚI: Nhập chi tiết lộ trình bên dưới</span>
+                </div>
+              )}
             </div>
 
             {/* CẤU HÌNH TUYẾN ĐƯỜNG & HÀNH TRÌNH */}
@@ -382,20 +486,66 @@ CREATE TABLE passenger_bookings (
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-between gap-3">
-              {saveSuccess && (
-                <span className="text-[11px] text-emerald-600 font-extrabold flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  Đã cập nhật hệ thống!
-                </span>
+            <div className="pt-2 flex flex-col gap-3 border-t border-slate-100 mt-4">
+              <div className="flex items-center justify-between gap-3">
+                {saveSuccess && (
+                  <span className="text-[11px] text-emerald-600 font-extrabold flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                    Đã đồng bộ nhà xe thành công!
+                  </span>
+                )}
+                
+                {/* Decommission route button - only for existing routes if more than 1 route exists */}
+                {!isCreatingNew && buses && buses.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(!showDeleteConfirm)}
+                    className="px-3.5 py-2 border border-red-200 hover:bg-red-50 text-red-600 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+                  >
+                    🗑️ Xóa Tuyến
+                  </button>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="ml-auto w-full sm:w-auto bg-red-600 hover:bg-red-700 disabled:bg-slate-400 text-white font-black text-xs px-5 py-2 rounded-lg transition-all shadow-sm cursor-pointer flex items-center gap-1"
+                >
+                  {saving ? (
+                    'Đang kết nối...'
+                  ) : isCreatingNew ? (
+                    <>🚀 Khởi Hành Tuyến Mới</>
+                  ) : (
+                    <>💾 Lưu Cài Đặt Nhà Xe</>
+                  )}
+                </button>
+              </div>
+
+              {/* Secure Inline Deletion Confirmation Box */}
+              {showDeleteConfirm && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs mt-2 animate-fade-in">
+                  <p className="font-extrabold text-red-800">⚠️ Bạn có chắc chắn muốn XÓA tuyến xe hoạt động này?</p>
+                  <p className="text-slate-500 mt-1">
+                    Toàn bộ lộ trình [{startPoint} &rarr; {endPoint}], biển số {plates}, sơ đồ đặt vé & lịch sử định dạng xe sẽ bị gỡ bỏ khỏi cơ sở dữ liệu BH Bus.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      type="button"
+                      onClick={handleDeleteAction}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white font-extrabold rounded-lg cursor-pointer transition-colors"
+                    >
+                      Xác Nhận Xóa
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-600 border border-slate-300 font-bold rounded-lg cursor-pointer transition-colors"
+                    >
+                      Hủy Bỏ
+                    </button>
+                  </div>
+                </div>
               )}
-              <button
-                type="submit"
-                disabled={saving}
-                className="ml-auto w-full sm:w-auto bg-red-650 bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs px-5 py-2 rounded-lg transition-colors shadow-xs"
-              >
-                {saving ? 'Đang lưu chỉnh sửa...' : 'Lưu Cài Đặt Nhà Xe'}
-              </button>
             </div>
           </form>
         </div>

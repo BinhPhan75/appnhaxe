@@ -58,6 +58,48 @@ interface SavedBerth {
   passenger?: SavedPassenger;
 }
 
+// Smart coordinate resolver for arbitrary Vietnamese station and city names
+function resolveCoords(name: string, isStart: boolean): { lat: number; lng: number } {
+  const n = (name || '').toLowerCase();
+  
+  // Sài Gòn / HCMC
+  if (n.includes('sài gòn') || n.includes('sai gon') || n.includes('hồ chí minh') || n.includes('tphcm') || n.includes('bến xe miền tây') || n.includes('miền tây')) {
+    return { lat: 10.7494, lng: 106.6171 };
+  }
+  if (n.includes('miền đông') || n.includes('bến xe miền đông')) {
+    return { lat: 10.8142, lng: 106.7126 };
+  }
+  
+  // Other major cities
+  if (n.includes('đà lạt') || n.includes('da lat') || n.includes('lâm đồng')) return { lat: 11.9333, lng: 108.4503 };
+  if (n.includes('cần thơ') || n.includes('can tho')) return { lat: 10.0152, lng: 105.7487 };
+  if (n.includes('nha trang') || n.includes('nha trang') || n.includes('khánh hòa')) return { lat: 12.2224, lng: 109.1672 };
+  if (n.includes('đà nẵng') || n.includes('da nang')) return { lat: 16.0544, lng: 108.2022 };
+  if (n.includes('hà nội') || n.includes('ha noi')) return { lat: 21.0285, lng: 105.8542 };
+  if (n.includes('vũng tàu') || n.includes('vung tau')) return { lat: 10.3460, lng: 107.0843 };
+  if (n.includes('phan thiết') || n.includes('phan thiet') || n.includes('bình thuận')) return { lat: 10.9322, lng: 108.1011 };
+  if (n.includes('rạch giá') || n.includes('rach gia') || n.includes('kiên giang')) return { lat: 10.0124, lng: 105.0809 };
+  if (n.includes('quy nhơn') || n.includes('quy nhon') || n.includes('bình định')) return { lat: 13.7820, lng: 109.2205 };
+  if (n.includes('buôn ma thuột') || n.includes('buon ma thuot') || n.includes('đắk lắk') || n.includes('bmt')) return { lat: 12.6667, lng: 108.0500 };
+  if (n.includes('hải phòng') || n.includes('hai phong')) return { lat: 20.8449, lng: 106.6881 };
+  if (n.includes('vinh') || n.includes('nghệ an')) return { lat: 18.6734, lng: 105.6811 };
+  if (n.includes('huế') || n.includes('thừa thiên')) return { lat: 16.4637, lng: 107.5909 };
+
+  // Generate slightly randomized coordinates nearby region based on hash if not recognized
+  let hash = 0;
+  for (let i = 0; i < n.length; i++) {
+    hash = n.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const latOffset = (hash % 100) / 200; // ±0.5 degree
+  const lngOffset = ((hash >> 8) % 100) / 200; // ±0.5 degree
+
+  if (isStart) {
+    return { lat: 10.7494 + latOffset, lng: 106.6171 + lngOffset }; // Sài Gòn region
+  } else {
+    return { lat: 11.9333 + latOffset, lng: 108.4503 + lngOffset }; // Đà Lạt region
+  }
+}
+
 // Dynamic routing waypoints generator based on user selections in Admin Panel
 function generateWaypointsByRoute(
   tripId: string,
@@ -67,15 +109,8 @@ function generateWaypointsByRoute(
 ): any[] {
   let coordsList: { name: string; coords: { lat: number; lng: number } }[] = [];
 
-  const startCoords = tripId === 'sg-nt' 
-    ? { lat: 10.8142, lng: 106.7126 } // BX Miền Đông
-    : { lat: 10.7494, lng: 106.6171 }; // BX Miền Tây
-
-  const endCoords = tripId === 'sg-dl'
-    ? { lat: 11.9333, lng: 108.4503 } // Đà Lạt
-    : tripId === 'sg-ct'
-    ? { lat: 10.0152, lng: 105.7487 } // Cần Thơ
-    : { lat: 12.2224, lng: 109.1672 }; // Nha Trang
+  const startCoords = resolveCoords(startName, true);
+  const endCoords = resolveCoords(endName, false);
 
   if (tripId === 'sg-dl') {
     if (routeType === 'expressway') {
@@ -143,7 +178,7 @@ function generateWaypointsByRoute(
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     }
-  } else { // sg-nt
+  } else if (tripId === 'sg-nt') {
     if (routeType === 'expressway') {
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
@@ -171,6 +206,34 @@ function generateWaypointsByRoute(
         { name: 'Phan Rang - Tháp Chàm (Ninh Thuận)', coords: { lat: 11.5684, lng: 108.9904 } },
         { name: 'Thành Phố Cam Ranh (Khánh Hòa)', coords: { lat: 11.9161, lng: 109.1412 } },
         { name: 'Bãi Dài Nha Trang', coords: { lat: 12.1158, lng: 109.2014 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    }
+  } else {
+    // Completely dynamic routing for newly added route!
+    if (routeType === 'expressway') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Vào Tuyến Cao Tốc Liên Tỉnh', coords: { lat: startCoords.lat * 0.75 + endCoords.lat * 0.25, lng: startCoords.lng * 0.75 + endCoords.lng * 0.25 } },
+        { name: 'Trạm Dừng Chân Cao Tốc Tiện Nghi', coords: { lat: startCoords.lat * 0.5 + endCoords.lat * 0.5, lng: startCoords.lng * 0.5 + endCoords.lng * 0.5 } },
+        { name: 'Nút Giao Cao Tốc Rẽ Chuẩn Bị Vào Bến', coords: { lat: startCoords.lat * 0.25 + endCoords.lat * 0.75, lng: startCoords.lng * 0.25 + endCoords.lng * 0.75 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else if (routeType === 'other') {
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Đường Tỉnh Lộ Nhánh Tránh', coords: { lat: startCoords.lat * 0.75 + endCoords.lat * 0.25 + 0.05, lng: startCoords.lng * 0.75 + endCoords.lng * 0.25 - 0.06 } },
+        { name: 'Trạm Nghỉ Điểm Du Lịch Địa Phương', coords: { lat: startCoords.lat * 0.5 + endCoords.lat * 0.5 - 0.04, lng: startCoords.lng * 0.5 + endCoords.lng * 0.5 + 0.07 } },
+        { name: 'Điểm Kiểm Kiểm Soát Lộ Trình Phụ', coords: { lat: startCoords.lat * 0.25 + endCoords.lat * 0.75 + 0.02, lng: startCoords.lng * 0.25 + endCoords.lng * 0.75 - 0.03 } },
+        { name: `${endName} (Đích đến)`, coords: endCoords }
+      ];
+    } else { // national_highway
+      coordsList = [
+        { name: `${startName} (Xuất phát)`, coords: startCoords },
+        { name: 'Trạm Thu Phí Quốc Lộ', coords: { lat: startCoords.lat * 0.8 + endCoords.lat * 0.2, lng: startCoords.lng * 0.8 + endCoords.lng * 0.2 } },
+        { name: 'Trạm Dừng Kiểm Soát Hành Trình', coords: { lat: startCoords.lat * 0.6 + endCoords.lat * 0.4, lng: startCoords.lng * 0.6 + endCoords.lng * 0.4 } },
+        { name: 'Trạm Dừng Chân Ăn Uống Quốc Lộ', coords: { lat: startCoords.lat * 0.4 + endCoords.lat * 0.6, lng: startCoords.lng * 0.4 + endCoords.lng * 0.6 } },
+        { name: 'Văn Phòng Đại Diện Tuyến', coords: { lat: startCoords.lat * 0.2 + endCoords.lat * 0.8, lng: startCoords.lng * 0.2 + endCoords.lng * 0.8 } },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     }
@@ -734,7 +797,42 @@ app.post('/api/bus-info', (req, res) => {
     routeType
   } = req.body;
   const targetTripId = tripId || busState.tripId;
-  const activeBus = buses[targetTripId] || busState;
+  let activeBus = buses[targetTripId];
+
+  if (!activeBus) {
+    // Dynamic creation of a brand new route!
+    activeBus = {
+      tripId: targetTripId,
+      layoutCapacity: 34,
+      currentLocation: { lat: 10.7494, lng: 106.6171 },
+      speed: 60,
+      isSimulating: true,
+      isOffline: false,
+      simulationProgress: 0,
+      licensePlate: licensePlate || '51B-000.00',
+      driverName: driverName || 'Tài xế mặc định',
+      driverPhone: driverPhone || '0901230000',
+      conductorName: conductorName || 'Tiếp viên mặc định',
+      conductorPhone: conductorPhone || '0933550000',
+      berths: [],
+      startName: startName || 'BX Miền Tây (Sài Gòn)',
+      endName: endName || 'BX Liên Tỉnh Đà Lạt',
+      routeType: routeType || 'national_highway',
+      waypoints: []
+    };
+
+    // Build the dynamic intermediate stations
+    activeBus.waypoints = generateWaypointsByRoute(targetTripId, activeBus.startName, activeBus.endName, activeBus.routeType);
+    if (activeBus.waypoints && activeBus.waypoints.length > 0) {
+      activeBus.currentLocation = activeBus.waypoints[0].coords;
+    }
+
+    // Initialize layout berths
+    initializeBerthsForBus(activeBus, activeBus.layoutCapacity);
+
+    // Save into active pool
+    buses[targetTripId] = activeBus;
+  }
 
   if (licensePlate !== undefined) activeBus.licensePlate = licensePlate;
   if (driverName !== undefined) activeBus.driverName = driverName;
@@ -761,6 +859,30 @@ app.post('/api/bus-info', (req, res) => {
   }
 
   res.json({ success: true, state: activeBus, buses: Object.values(buses) });
+});
+
+// POST: Delete a route from fleet
+app.post('/api/bus-delete', (req, res) => {
+  const { tripId } = req.body;
+  if (!tripId) {
+    return res.status(400).json({ success: false, error: 'tripId is required' });
+  }
+  
+  if (Object.keys(buses).length <= 1) {
+    return res.status(400).json({ success: false, error: 'Không thể xóa tuyến xe cuối cùng của nhà xe!' });
+  }
+
+  if (buses[tripId]) {
+    delete buses[tripId];
+    // If the currently pointed busState is the deleted one, set it to the first available bus
+    if (busState.tripId === tripId) {
+      const firstId = Object.keys(buses)[0];
+      busState = buses[firstId];
+    }
+    return res.json({ success: true, message: `Thành công xóa tuyến xe ${tripId}`, state: busState, buses: Object.values(buses) });
+  } else {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy mã tuyến này' });
+  }
 });
 
 // POST: Update live simulation location or actual tracking positions
