@@ -32,10 +32,10 @@ export const BerthMap: React.FC<BerthMapProps> = ({
   // Filter berths by active floor
   const floorBerths = berths.filter(b => b.floor === activeFloor);
 
-  // Group by rows (A, B, C)
-  const rowA = floorBerths.filter(b => b.row === 'A').sort((a,b) => a.number - b.number);
-  const rowB = floorBerths.filter(b => b.row === 'B').sort((a,b) => a.number - b.number);
-  const rowC = floorBerths.filter(b => b.row === 'C').sort((a,b) => a.number - b.number);
+  // Group by rows (A/D, B/E, C/F)
+  const rowA = floorBerths.filter(b => b.row === 'A' || b.row === 'D').sort((a,b) => a.number - b.number);
+  const rowB = floorBerths.filter(b => b.row === 'B' || b.row === 'E').sort((a,b) => a.number - b.number);
+  const rowC = floorBerths.filter(b => b.row === 'C' || b.row === 'F').sort((a,b) => a.number - b.number);
 
   // Find maximum column length to align grid nicely
   const maxRowLen = Math.max(rowA.length, rowB.length, rowC.length);
@@ -273,11 +273,21 @@ const BerthCard: React.FC<BerthCardProps> = ({ berth, onClick, onToggleStatus, o
           )}
         </div>
 
-        {berth.passenger ? (
+        {berth.passenger && berth.status !== 'dropped' ? (
           <div className="overflow-hidden">
             <p className="text-xs font-bold truncate block">{berth.passenger.name}</p>
             <p className="text-[10px] text-slate-500 font-medium truncate flex items-center gap-0.5 text-slate-600">
               <MapPin className="w-2.5 h-2.5 text-red-600 shrink-0" />
+              {berth.passenger.destination}
+            </p>
+          </div>
+        ) : berth.passenger && berth.status === 'dropped' ? (
+          <div className="overflow-hidden opacity-60">
+            <p className="text-xs font-medium text-slate-400 line-through truncate block">
+              {berth.passenger.name} (Đã xuống)
+            </p>
+            <p className="text-[9px] text-slate-400 truncate flex items-center gap-0.5">
+              <MapPin className="w-2.5 h-2.5 text-slate-400 shrink-0" />
               {berth.passenger.destination}
             </p>
           </div>

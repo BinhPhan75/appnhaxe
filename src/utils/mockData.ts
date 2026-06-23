@@ -178,17 +178,20 @@ export function generateInitialBerths(capacity: number): Berth[] {
     // 11 Lower, 11 Upper.
     // 3 rows: A, B, C.
     // Floor lower: Row A (1, 2, 3, 4), Row B (1, 2, 3), Row C (1, 2, 3, 4) -> 11
-    // Floor upper: Row A (1, 2, 3, 4), Row B (1, 2, 3), Row C (1, 2, 3, 4) -> 11
+    // Floor upper: Row D (1, 2, 3, 4), Row E (1, 2, 3), Row F (1, 2, 3, 4) -> 11
     floors.forEach(floor => {
       let count = 1;
+      const rowALetter = floor === 'lower' ? 'A' : 'D';
+      const rowBLetter = floor === 'lower' ? 'B' : 'E';
+      const rowCLetter = floor === 'lower' ? 'C' : 'F';
 
       // Row A (Left)
       for (let i = 1; i <= 4; i++) {
         list.push({
-          id: `${floor}_A${count}`,
-          label: `A${count}`,
+          id: `${floor}_${rowALetter}${count}`,
+          label: `${rowALetter}${count}`,
           floor,
-          row: 'A',
+          row: rowALetter,
           number: count,
           status: 'empty'
         });
@@ -198,10 +201,10 @@ export function generateInitialBerths(capacity: number): Berth[] {
       // Row B (Middle)
       for (let i = 1; i <= 3; i++) {
         list.push({
-          id: `${floor}_B${count}`,
-          label: `B${count}`,
+          id: `${floor}_${rowBLetter}${count}`,
+          label: `${rowBLetter}${count}`,
           floor,
-          row: 'B',
+          row: rowBLetter,
           number: count,
           status: 'empty'
         });
@@ -211,10 +214,10 @@ export function generateInitialBerths(capacity: number): Berth[] {
       // Row C (Right)
       for (let i = 1; i <= 4; i++) {
         list.push({
-          id: `${floor}_C${count}`,
-          label: `C${count}`,
+          id: `${floor}_${rowCLetter}${count}`,
+          label: `${rowCLetter}${count}`,
           floor,
-          row: 'C',
+          row: rowCLetter,
           number: count,
           status: 'empty'
         });
@@ -229,14 +232,17 @@ export function generateInitialBerths(capacity: number): Berth[] {
     // Row C: (1-6) = 6
     floors.forEach(floor => {
       let count = 1;
+      const rowALetter = floor === 'lower' ? 'A' : 'D';
+      const rowBLetter = floor === 'lower' ? 'B' : 'E';
+      const rowCLetter = floor === 'lower' ? 'C' : 'F';
 
       // Row A (Left)
       for (let i = 1; i <= 6; i++) {
         list.push({
-          id: `${floor}_A${count}`,
-          label: `A${count}`,
+          id: `${floor}_${rowALetter}${count}`,
+          label: `${rowALetter}${count}`,
           floor,
-          row: 'A',
+          row: rowALetter,
           number: count,
           status: 'empty'
         });
@@ -246,10 +252,10 @@ export function generateInitialBerths(capacity: number): Berth[] {
       // Row B (Middle)
       for (let i = 1; i <= 5; i++) {
         list.push({
-          id: `${floor}_B${count}`,
-          label: `B${count}`,
+          id: `${floor}_${rowBLetter}${count}`,
+          label: `${rowBLetter}${count}`,
           floor,
-          row: 'B',
+          row: rowBLetter,
           number: count,
           status: 'empty'
         });
@@ -259,10 +265,10 @@ export function generateInitialBerths(capacity: number): Berth[] {
       // Row C (Right)
       for (let i = 1; i <= 6; i++) {
         list.push({
-          id: `${floor}_C${count}`,
-          label: `C${count}`,
+          id: `${floor}_${rowCLetter}${count}`,
+          label: `${rowCLetter}${count}`,
           floor,
-          row: 'C',
+          row: rowCLetter,
           number: count,
           status: 'empty'
         });
@@ -273,18 +279,21 @@ export function generateInitialBerths(capacity: number): Berth[] {
   } else {
     // 41 Beds standard
     // Floor Lower: 20 beds. Row A: 1-7 (7), Row B: 1-6 (6), Row C: 1-7 (7) = 20
-    // Floor Upper: 21 beds. Close layout. Row A: 1-7 (7), Row B: 1-7 (7), Row C: 1-7 (7) = 21
+    // Floor Upper: 21 beds. Close layout. Row D: 1-7 (7), Row E: 1-7 (7), Row F: 1-7 (7) = 21
     floors.forEach(floor => {
       let count = 1;
       const isUpper = floor === 'upper';
+      const rowALetter = floor === 'lower' ? 'A' : 'D';
+      const rowBLetter = floor === 'lower' ? 'B' : 'E';
+      const rowCLetter = floor === 'lower' ? 'C' : 'F';
 
       // Row A (7 beds)
       for (let i = 1; i <= 7; i++) {
         list.push({
-          id: `${floor}_A${count}`,
-          label: `A${count}`,
+          id: `${floor}_${rowALetter}${count}`,
+          label: `${rowALetter}${count}`,
           floor,
-          row: 'A',
+          row: rowALetter,
           number: count,
           status: 'empty'
         });
@@ -295,10 +304,10 @@ export function generateInitialBerths(capacity: number): Berth[] {
       const bCountLimit = isUpper ? 7 : 6;
       for (let i = 1; i <= bCountLimit; i++) {
         list.push({
-          id: `${floor}_B${count}`,
-          label: `B${count}`,
+          id: `${floor}_${rowBLetter}${count}`,
+          label: `${rowBLetter}${count}`,
           floor,
-          row: 'B',
+          row: rowBLetter,
           number: count,
           status: 'empty'
         });
@@ -308,10 +317,10 @@ export function generateInitialBerths(capacity: number): Berth[] {
       // Row C (7 beds)
       for (let i = 1; i <= 7; i++) {
         list.push({
-          id: `${floor}_C${count}`,
-          label: `C${count}`,
+          id: `${floor}_${rowCLetter}${count}`,
+          label: `${rowCLetter}${count}`,
           floor,
-          row: 'C',
+          row: rowCLetter,
           number: count,
           status: 'empty'
         });

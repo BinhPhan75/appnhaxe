@@ -52,7 +52,7 @@ interface SavedBerth {
   id: string;
   label: string;
   floor: 'lower' | 'upper';
-  row: 'A' | 'B' | 'C' | 'D' | 'E';
+  row: 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
   number: number;
   status: 'empty' | 'booked' | 'approaching' | 'dropped';
   passenger?: SavedPassenger;
@@ -337,19 +337,23 @@ function initializeBerthsForBus(bus: any, capacity: number) {
     const limit = capacity === 22 ? 4 : capacity === 34 ? 6 : 7;
     const middleLimit = capacity === 22 ? 3 : capacity === 34 ? 5 : 6;
 
+    const rowALetter = floor === 'lower' ? 'A' : 'D';
+    const rowBLetter = floor === 'lower' ? 'B' : 'E';
+    const rowCLetter = floor === 'lower' ? 'C' : 'F';
+
     // Row A (Left)
     for (let i = 1; i <= limit; i++) {
-      berths.push({ id: `${floor}_A${count}`, label: `A${count}`, floor, row: 'A', number: count, status: 'empty' });
+      berths.push({ id: `${floor}_${rowALetter}${count}`, label: `${rowALetter}${count}`, floor, row: rowALetter, number: count, status: 'empty' });
       count++;
     }
     // Row B (Middle)
     for (let i = 1; i <= middleLimit; i++) {
-      berths.push({ id: `${floor}_B${count}`, label: `B${count}`, floor, row: 'B', number: count, status: 'empty' });
+      berths.push({ id: `${floor}_${rowBLetter}${count}`, label: `${rowBLetter}${count}`, floor, row: rowBLetter, number: count, status: 'empty' });
       count++;
     }
     // Row C (Right)
     for (let i = 1; i <= limit; i++) {
-      berths.push({ id: `${floor}_C${count}`, label: `C${count}`, floor, row: 'C', number: count, status: 'empty' });
+      berths.push({ id: `${floor}_${rowCLetter}${count}`, label: `${rowCLetter}${count}`, floor, row: rowCLetter, number: count, status: 'empty' });
       count++;
     }
   });

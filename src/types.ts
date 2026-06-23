@@ -1,5 +1,5 @@
 export type FloorType = 'lower' | 'upper';
-export type RowType = 'A' | 'B' | 'C' | 'D' | 'E'; // E is for back row
+export type RowType = 'A' | 'B' | 'C' | 'D' | 'E' | 'F'; // E and F are for back and upper rows
 export type BerthStatus = 'empty' | 'booked' | 'approaching' | 'dropped';
 
 export interface Coords {

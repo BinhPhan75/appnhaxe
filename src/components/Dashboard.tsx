@@ -244,6 +244,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
         `)
         .addTo(mapRef.current);
       }
+
+      // Add selection and focus synchronization to marker clicks
+      busesMarkersRef.current[bus.tripId].off('click');
+      busesMarkersRef.current[bus.tripId].on('click', () => {
+        if (onSelectTrip) {
+          onSelectTrip(bus.tripId);
+        }
+      });
     });
 
     // Fly smoothly to track the actively simulating focus bus
