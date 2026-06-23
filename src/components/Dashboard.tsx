@@ -45,8 +45,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const busesMarkersRef = useRef<Record<string, L.Marker>>({});
-  const routePolylineRef = useRef<L.Polyline | null>(null);
+  const routePolylinesRef = useRef<Record<string, L.Polyline>>({});
+  const startMarkerRef = useRef<L.Marker | null>(null);
+  const endMarkerRef = useRef<L.Marker | null>(null);
   const passengerMarkersRef = useRef<L.Marker[]>([]);
+  const lastFocusedTripIdRef = useRef<string | null>(null);
 
   const [customerSearch, setCustomerSearch] = useState('');
   const activeBuses = (buses && buses.length > 0) ? buses : [busState];
@@ -154,7 +157,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     // Initial Render of Path line
     const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
-    routePolylineRef.current = L.polyline(coordsList, {
+    routePolylinesRef.current[tripConfig.id] = L.polyline(coordsList, {
       color: '#dc2626',
       weight: 4,
       opacity: 0.8,
@@ -189,10 +192,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Update Polyline when waypoints are customized
   useEffect(() => {
-    if (!mapRef.current || !routePolylineRef.current) return;
+    const currentPolyLine = routePolylinesRef.current[tripConfig.id];
+    if (!mapRef.current || !currentPolyLine) return;
     const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
-    routePolylineRef.current.setLatLngs(coordsList);
-  }, [tripConfig.waypoints]);
+    currentPolyLine.setLatLngs(coordsList);
+  }, [tripConfig.waypoints, tripConfig.id]);
 
   // Update client position and entire fleet of buses on map
   useEffect(() => {

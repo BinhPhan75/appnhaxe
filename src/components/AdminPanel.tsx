@@ -163,6 +163,8 @@ export default function AdminPanel({
   const [crmLogs, setCrmLogs] = useState<BookedPassengerLog[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedBusSql, setCopiedBusSql] = useState(false);
+  const [activeSqlTab, setActiveSqlTab] = useState<'bookings' | 'routes'>('bookings');
 
   // Sync state modifications based on route selection
   useEffect(() => {
@@ -295,6 +297,36 @@ CREATE TABLE passenger_bookings (
     navigator.clipboard.writeText(rawSql);
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 3000);
+  };
+
+  const copyBusSqlToClipboard = () => {
+    const rawSql = `-- Script SQL khởi tạo bảng lưu trữ các tuyến xe (bus routes)
+CREATE TABLE bus_routes (
+  trip_id text PRIMARY KEY,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  layout_capacity integer DEFAULT 34,
+  license_plate text,
+  driver_name text,
+  driver_phone text,
+  conductor_name text,
+  conductor_phone text,
+  start_name text,
+  end_name text,
+  route_type text,
+  status text DEFAULT 'active',
+  start_coords jsonb,
+  end_coords jsonb,
+  current_location jsonb,
+  speed integer DEFAULT 60,
+  is_simulating boolean DEFAULT true,
+  is_offline boolean DEFAULT false,
+  simulation_progress numeric DEFAULT 0,
+  waypoints jsonb DEFAULT '[]'::jsonb,
+  berths jsonb DEFAULT '[]'::jsonb
+);`;
+    navigator.clipboard.writeText(rawSql);
+    setCopiedBusSql(true);
+    setTimeout(() => setCopiedBusSql(false), 3000);
   };
 
   const filteredLogs = crmLogs.filter(log => {
@@ -789,27 +821,58 @@ CREATE TABLE passenger_bookings (
               </div>
             )}
 
-            <div className="bg-slate-55 bg-slate-50 border border-slate-200 rounded-lg p-3">
-              <div className="flex items-center justify-between">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3">
+              <div className="flex items-center justify-between mb-2">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">SQL Schema (Để tạo bảng)</span>
-                <button
-                  onClick={copySqlToClipboard}
-                  className="text-[10px] font-bold text-red-600 hover:text-red-700 bg-white border border-slate-200 px-2 py-1 rounded flex items-center gap-1 shadow-xs transition-all"
-                >
-                  {copiedSql ? (
-                    <>
-                      <Check className="w-3 h-3 text-emerald-500" />
-                      <span>Đã Sao Chép!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3 text-slate-400" />
-                      <span>Sao Chép SQL</span>
-                    </>
-                  )}
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveSqlTab('bookings')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-black tracking-tight transition-all cursor-pointer ${
+                      activeSqlTab === 'bookings'
+                        ? 'bg-slate-800 text-white shadow-xs'
+                        : 'bg-slate-200/50 hover:bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    Khách Hàng
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveSqlTab('routes')}
+                    className={`px-2 py-0.5 rounded text-[10px] font-black tracking-tight transition-all cursor-pointer ${
+                      activeSqlTab === 'routes'
+                        ? 'bg-slate-800 text-white shadow-xs'
+                        : 'bg-slate-200/50 hover:bg-slate-200 text-slate-500'
+                    }`}
+                  >
+                    Tuyến Đường
+                  </button>
+                </div>
               </div>
-              <pre className="mt-2 text-[9px] font-mono whitespace-pre text-slate-600 bg-slate-900 text-slate-300 p-2.5 rounded-md overflow-x-auto max-h-36 leading-normal scrollbar-thin">
+
+              {activeSqlTab === 'bookings' ? (
+                <>
+                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/50 mb-1.5 text-[9px] text-slate-400 font-bold">
+                    <span>1. Bảng Đặt Chỗ (passenger_bookings)</span>
+                    <button
+                      type="button"
+                      onClick={copySqlToClipboard}
+                      className="text-[9px] font-black text-red-600 hover:text-red-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-xs transition-all cursor-pointer"
+                    >
+                      {copiedSql ? (
+                        <>
+                          <Check className="w-2.5 h-2.5 text-emerald-500" />
+                          <span>Đã Lưu!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-2.5 h-2.5 text-slate-400" />
+                          <span>Sao chép</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <pre className="text-[9px] font-mono whitespace-pre text-slate-300 bg-slate-900 p-2.5 rounded-md overflow-x-auto max-h-40 leading-normal scrollbar-thin">
 {`CREATE TABLE passenger_bookings (
   id bigint GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -822,7 +885,57 @@ CREATE TABLE passenger_bookings (
   berth_id text,
   trip_id text
 );`}
-              </pre>
+                  </pre>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between pb-1.5 border-b border-slate-200/50 mb-1.5 text-[9px] text-slate-400 font-bold">
+                    <span>2. Bảng Tuyến Xe (bus_routes)</span>
+                    <button
+                      type="button"
+                      onClick={copyBusSqlToClipboard}
+                      className="text-[9px] font-black text-red-600 hover:text-red-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded flex items-center gap-0.5 shadow-xs transition-all cursor-pointer"
+                    >
+                      {copiedBusSql ? (
+                        <>
+                          <Check className="w-2.5 h-2.5 text-emerald-500" />
+                          <span>Đã Lưu!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-2.5 h-2.5 text-slate-400" />
+                          <span>Sao chép</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <pre className="text-[9px] font-mono whitespace-pre text-slate-300 bg-slate-900 p-2.5 rounded-md overflow-x-auto max-h-40 leading-normal scrollbar-thin">
+{`CREATE TABLE bus_routes (
+  trip_id text PRIMARY KEY,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  layout_capacity integer DEFAULT 34,
+  license_plate text,
+  driver_name text,
+  driver_phone text,
+  conductor_name text,
+  conductor_phone text,
+  start_name text,
+  end_name text,
+  route_type text,
+  status text DEFAULT 'active',
+  start_coords jsonb,
+  end_coords jsonb,
+  current_location jsonb,
+  speed integer DEFAULT 60,
+  is_simulating boolean DEFAULT true,
+  is_offline boolean DEFAULT false,
+  simulation_progress numeric DEFAULT 0,
+  waypoints jsonb DEFAULT '[]'::jsonb,
+  berths jsonb DEFAULT '[]'::jsonb
+);`}
+                  </pre>
+                </>
+              )}
             </div>
           </div>
         </div>

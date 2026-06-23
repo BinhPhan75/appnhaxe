@@ -332,6 +332,159 @@ let buses: Record<string, any> = {
 
 let busState = buses['sg-dl'];
 
+// --- SUPABASE BUS PERSISTENCE HELPERS ---
+async function seedDefaultBusesToSupabase() {
+  if (!supabase) return;
+  try {
+    console.log('Seeding default buses to Supabase...');
+    for (const key of Object.keys(buses)) {
+      const b = buses[key];
+      // Make sure we have berths populated before inserting
+      if (!b.berths || b.berths.length === 0) {
+        initializeBerthsForBus(b, b.layoutCapacity);
+      }
+      const { error } = await supabase.from('bus_routes').insert([{
+        trip_id: b.tripId,
+        layout_capacity: b.layoutCapacity,
+        current_location: b.currentLocation,
+        speed: b.speed,
+        is_simulating: b.isSimulating,
+        is_offline: b.isOffline,
+        simulation_progress: b.simulationProgress,
+        license_plate: b.licensePlate,
+        driver_name: b.driverName,
+        driver_phone: b.driverPhone,
+        conductor_name: b.conductorName,
+        conductor_phone: b.conductorPhone,
+        start_name: b.startName,
+        end_name: b.endName,
+        route_type: b.routeType,
+        status: b.status,
+        start_coords: b.startCoords,
+        end_coords: b.endCoords,
+        waypoints: b.waypoints,
+        berths: b.berths
+      }]);
+      if (error) {
+        console.warn(`Could not seed bus ${b.tripId} into Supabase (it may already exist):`, error.message);
+      } else {
+        console.log(`Seeded bus ${b.tripId} into Supabase successfully.`);
+      }
+    }
+  } catch (err: any) {
+    console.error('Exception seeding default buses:', err.message);
+  }
+}
+
+async function syncBusesFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('bus_routes').select('*');
+    if (error) {
+      console.warn('⚠️ Could not fetch from bus_routes, table might not exist in Supabase yet. Using local RAM state.', error.message);
+      return;
+    }
+    if (data && data.length > 0) {
+      console.log(`Loaded ${data.length} active bus routes dynamically from Supabase!`);
+      const newBuses: Record<string, any> = {};
+      data.forEach((row: any) => {
+        newBuses[row.trip_id] = {
+          tripId: row.trip_id,
+          layoutCapacity: row.layout_capacity,
+          currentLocation: row.current_location || { lat: 10.7494, lng: 106.6171 },
+          speed: row.speed !== undefined ? Number(row.speed) : 60,
+          isSimulating: row.is_simulating !== undefined ? !!row.is_simulating : true,
+          isOffline: row.is_offline !== undefined ? !!row.is_offline : false,
+          simulationProgress: row.simulation_progress !== undefined ? Number(row.simulation_progress) : 0,
+          licensePlate: row.license_plate,
+          driverName: row.driver_name,
+          driverPhone: row.driver_phone,
+          conductorName: row.conductor_name,
+          conductorPhone: row.conductor_phone,
+          startName: row.start_name,
+          endName: row.end_name,
+          routeType: row.route_type,
+          status: row.status || 'active',
+          startCoords: row.start_coords,
+          endCoords: row.end_coords,
+          waypoints: row.waypoints || [],
+          berths: row.berths || []
+        };
+      });
+      buses = newBuses;
+      
+      // Update global pointer reference
+      if (buses['sg-dl']) {
+        busState = buses['sg-dl'];
+      } else {
+        const firstId = Object.keys(buses)[0];
+        if (firstId) {
+          busState = buses[firstId];
+        }
+      }
+    } else {
+      console.log('ℹ️ Supabase bus_routes table exists but is empty. Seeding defaults...');
+      await seedDefaultBusesToSupabase();
+    }
+  } catch (err: any) {
+    console.error('Exception syncing buses from Supabase:', err.message);
+  }
+}
+
+async function saveBusToSupabase(bus: any) {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from('bus_routes')
+      .upsert({
+        trip_id: bus.tripId,
+        layout_capacity: bus.layoutCapacity,
+        current_location: bus.currentLocation,
+        speed: bus.speed,
+        is_simulating: bus.isSimulating,
+        is_offline: bus.isOffline,
+        simulation_progress: bus.simulationProgress,
+        license_plate: bus.licensePlate,
+        driver_name: bus.driverName,
+        driver_phone: bus.driverPhone,
+        conductor_name: bus.conductorName,
+        conductor_phone: bus.conductorPhone,
+        start_name: bus.startName,
+        end_name: bus.endName,
+        route_type: bus.routeType,
+        status: bus.status || 'active',
+        start_coords: bus.startCoords,
+        end_coords: bus.endCoords,
+        waypoints: bus.waypoints || [],
+        berths: bus.berths || []
+      }, { onConflict: 'trip_id' });
+    if (error) {
+      console.error(`Error saving bus route ${bus.tripId} to Supabase:`, error.message);
+    } else {
+      console.log(`Successfully saved/synced bus route ${bus.tripId} into Supabase!`);
+    }
+  } catch (err: any) {
+    console.error('Exception saving bus to Supabase:', err.message);
+  }
+}
+
+async function deleteBusFromSupabase(tripId: string) {
+  if (!supabase) return;
+  try {
+    const { error } = await supabase
+      .from('bus_routes')
+      .delete()
+      .eq('trip_id', tripId);
+    if (error) {
+      console.error(`Error deleting bus route ${tripId} from Supabase:`, error.message);
+    } else {
+      console.log(`Successfully deleted bus route ${tripId} from Supabase.`);
+    }
+  } catch (err: any) {
+    console.error('Exception deleting bus from Supabase:', err.message);
+  }
+}
+
 // Seed initial bookings for standard demo (so the stats aren't boring 0% when first loading!)
 function initializeBerthsForBus(bus: any, capacity: number) {
   const berths: SavedBerth[] = [];
@@ -646,6 +799,8 @@ app.post('/api/bookings', (req, res) => {
         }
       }
     }
+    // Save updated bus state with its berths to Supabase
+    saveBusToSupabase(busState);
     res.json({ success: true, state: busState });
   } else {
     res.status(404).json({ success: false, error: 'Berth not found' });
@@ -740,6 +895,9 @@ app.post('/api/sync', (req, res) => {
         }
       }
     });
+
+    // Save synchronized bus state to Supabase
+    saveBusToSupabase(busState);
 
     res.json({ success: true, message: `Successfully synchronized ${transactions.length} offline operations!`, state: busState, customers: customHistoryDatabase });
   } else {
@@ -886,6 +1044,9 @@ app.post('/api/bus-info', (req, res) => {
     }
   }
 
+  // Persist created or updated bus to Supabase
+  saveBusToSupabase(activeBus);
+
   res.json({ success: true, state: activeBus, buses: Object.values(buses) });
 });
 
@@ -902,6 +1063,7 @@ app.post('/api/bus-delete', (req, res) => {
 
   if (buses[tripId]) {
     delete buses[tripId];
+    deleteBusFromSupabase(tripId);
     // If the currently pointed busState is the deleted one, set it to the first available bus
     if (busState.tripId === tripId) {
       const firstId = Object.keys(buses)[0];
@@ -925,6 +1087,7 @@ app.post('/api/location', (req, res) => {
     if (isSimulating !== undefined) activeBus.isSimulating = isSimulating;
     if (progress !== undefined) activeBus.simulationProgress = progress;
     
+    saveBusToSupabase(activeBus);
     res.json({ success: true, state: activeBus, buses: Object.values(buses) });
   } else {
     res.status(400).json({ success: false, error: 'Missing lat or lng coords' });
@@ -952,8 +1115,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Express custom server listening on port ${PORT}`);
+    // Sync buses from Supabase on startup
+    await syncBusesFromSupabase();
   });
 }
 
