@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Berth, TripConfig } from '../types';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Route, MapPin, Compass } from 'lucide-react';
+import { Route, MapPin, Compass, Maximize2, Minimize2 } from 'lucide-react';
 
 interface ConductorMapProps {
   currentLocation: { lat: number; lng: number };
@@ -22,6 +22,29 @@ export const ConductorMap: React.FC<ConductorMapProps> = ({
   const busMarkerRef = useRef<L.Marker | null>(null);
   const markersRef = useRef<L.Marker[]>([]);
   const routePolylineRef = useRef<L.Polyline | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  // Body scroll lock and map invalidation when fullscreen toggle occurs
+  useEffect(() => {
+    if (isFullScreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    const timer = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+        // Recenter on bus location smoothly or fit bounds
+        if (currentLocation) {
+          mapRef.current.panTo([currentLocation.lat, currentLocation.lng]);
+        }
+      }
+    }, 150);
+    return () => {
+      document.body.style.overflow = '';
+      clearTimeout(timer);
+    };
+  }, [isFullScreen]);
 
   // Helper inside component to find pickup coordinates
   const getPickupCoords = (passenger: any, trip: TripConfig) => {
@@ -192,26 +215,52 @@ export const ConductorMap: React.FC<ConductorMapProps> = ({
   }, [currentLocation, berths, tripConfig.id]);
 
   return (
-    <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 flex flex-col h-[320px]">
+    <div className={isFullScreen 
+      ? "fixed inset-0 z-[9999] bg-white flex flex-col p-6 h-screen w-screen animate-fade-in" 
+      : "bg-white rounded-xl shadow-xs border border-slate-200 p-5 flex flex-col h-[320px]"
+    }>
       <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3 shrink-0">
         <div className="flex items-center gap-2">
           <Route className="w-4.5 h-4.5 text-red-600" />
           <div>
-            <h4 className="font-extrabold text-xs uppercase text-slate-700 tracking-tight">HÀNH TRÌNH XE CHẠY & ĐIỂM ĐÓN/TRẢ (GPS LIVE)</h4>
+            <h4 className="font-extrabold text-xs uppercase text-slate-700 tracking-tight flex items-center gap-2">
+              HÀNH TRÌNH XE CHẠY & ĐIỂM ĐÓN/TRẢ (GPS LIVE)
+              {isFullScreen && <span className="bg-red-50 text-red-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-red-150 uppercase tracking-wider">Toàn màn hình</span>}
+            </h4>
             <p className="text-[10px] text-slate-400">
               <span className="text-emerald-600 font-bold">● Màu xanh: Điểm đón khách</span> {" | "} 
               <span className="text-red-600 font-bold">● Màu đỏ: Điểm trả khách</span>
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <Compass className="w-3.5 h-3.5 text-slate-400 animate-spin" style={{ animationDuration: '6s' }} />
-          <span className="text-[10px] font-mono font-black text-slate-500">{speed} KM/H</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg">
+            <Compass className="w-3.5 h-3.5 text-slate-400 animate-spin" style={{ animationDuration: '6s' }} />
+            <span className="text-[10px] font-mono font-black text-slate-600">{speed} KM/H</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsFullScreen(!isFullScreen)}
+            className="p-1.5 border border-slate-200 text-slate-600 hover:text-red-600 hover:bg-slate-50 rounded-lg transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+            title={isFullScreen ? "Thu nhỏ" : "Toàn màn hình"}
+          >
+            {isFullScreen ? (
+              <>
+                <Minimize2 className="w-4 h-4 text-red-600 shrink-0" />
+                <span>Thu nhỏ</span>
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />
+                <span>Toàn màn hình</span>
+              </>
+            )}
+          </button>
         </div>
       </div>
       
-      <div className="flex-1 rounded-lg overflow-hidden border border-slate-150 relative z-10">
-        <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: '200px' }} />
+      <div className="flex-1 rounded-lg overflow-hidden border border-slate-150 relative z-10 bg-slate-50">
+        <div ref={mapContainerRef} className="w-full h-full" style={{ minHeight: isFullScreen ? 'calc(100vh - 120px)' : '200px' }} />
       </div>
     </div>
   );

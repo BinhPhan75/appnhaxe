@@ -19,7 +19,9 @@ import {
   Plus,
   Trash2,
   Calendar,
-  ClipboardList
+  ClipboardList,
+  Maximize2,
+  Minimize2
 } from 'lucide-react';
 
 interface DashboardProps {
@@ -48,6 +50,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   const [customerSearch, setCustomerSearch] = useState('');
   const activeBuses = (buses && buses.length > 0) ? buses : [busState];
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  // Body scroll lock and map size invalidation when fullscreen toggle occurs
+  useEffect(() => {
+    if (isFullScreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    const timer = setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+        // Recenter on bus location smoothly or fit bounds
+        if (busState && busState.currentLocation) {
+          mapRef.current.panTo([busState.currentLocation.lat, busState.currentLocation.lng]);
+        }
+      }
+    }, 150);
+    return () => {
+      document.body.style.overflow = '';
+      clearTimeout(timer);
+    };
+  }, [isFullScreen, busState?.currentLocation]);
 
   // Waypoints local setup states
   const [newStopName, setNewStopName] = useState('');
@@ -512,25 +537,49 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <div className="lg:col-span-2 flex flex-col gap-6">
           
           {/* Container Map Card */}
-          <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 flex flex-col h-[400px]">
+          <div className={isFullScreen 
+            ? "fixed inset-0 z-[9999] bg-white flex flex-col p-6 h-screen w-screen animate-fade-in" 
+            : "bg-white rounded-xl shadow-xs border border-slate-200 p-5 flex flex-col h-[400px]"
+          }>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div>
                 <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2 uppercase text-xs">
                   <Route className="w-4 h-4 text-red-600" />
                   Định Vị Hành Trình Trực Tuyến
+                  {isFullScreen && <span className="bg-red-50 text-red-700 text-[10px] font-black px-2 py-0.5 rounded-full border border-red-150 uppercase tracking-wider">Toàn màn hình</span>}
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">Toàn bộ lộ trình tự động cập nhật và thu hút GPS hành khách</p>
               </div>
               
-              <div className="flex items-center gap-1">
-                <span className={`w-2 h-2 rounded-full ${busState.isOffline ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'}`}></span>
-                <span className="text-xs font-bold text-slate-600">{busState.isOffline ? 'Offline' : 'Realtime'}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg">
+                  <span className={`w-2 h-2 rounded-full ${busState.isOffline ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'}`}></span>
+                  <span className="text-[10px] font-black text-slate-650 text-slate-600">{busState.isOffline ? 'Offline' : 'Realtime'}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFullScreen(!isFullScreen)}
+                  className="p-1.5 border border-slate-200 text-slate-600 hover:text-red-700 hover:bg-slate-50 rounded-lg transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+                  title={isFullScreen ? "Thu nhỏ" : "Toàn màn hình"}
+                >
+                  {isFullScreen ? (
+                    <>
+                      <Minimize2 className="w-4 h-4 text-red-600 shrink-0" />
+                      <span>Thu nhỏ</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />
+                      <span>Toàn màn hình</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
 
             <div className="flex-1 rounded-xl overflow-hidden mt-4 relative z-10 border border-slate-150">
               {/* Leaflet Map container mount point */}
-              <div ref={mapContainerRef} className="w-full h-full animate-fade-in" style={{ minHeight: '300px' }} />
+              <div ref={mapContainerRef} className="w-full h-full animate-fade-in" style={{ minHeight: isFullScreen ? 'calc(100vh - 120px)' : '300px' }} />
 
               {/* Offline notification covering map layer when offline */}
               {busState.isOffline && (
