@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TripConfig, Waypoint, Passenger } from '../types';
-import { MapPin, Phone, User, X, Check, Search } from 'lucide-react';
+import { MapPin, Phone, User, X, Check, Search, Calendar, IdCard } from 'lucide-react';
 
 interface PassengerModalProps {
   berthLabel: string;
@@ -20,6 +20,9 @@ export const PassengerModal: React.FC<PassengerModalProps> = ({
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [destination, setDestination] = useState('');
+  const [cccd, setCccd] = useState('');
+  const [travelDate, setTravelDate] = useState(new Date().toISOString().split('T')[0]);
+  const [pickupPoint, setPickupPoint] = useState(tripConfig.startName || '');
   
   // Suggested destinations on the active route map + famous spots
   const [suggestions, setSuggestions] = useState<Waypoint[]>([]);
@@ -73,7 +76,10 @@ export const PassengerModal: React.FC<PassengerModalProps> = ({
       name: name.trim(),
       phone: phone.trim() || undefined,
       destination: destination.trim(),
-      coords
+      coords,
+      cccd: cccd.trim() || undefined,
+      travelDate,
+      pickupPoint: pickupPoint.trim() || undefined
     });
   };
 
@@ -119,13 +125,59 @@ export const PassengerModal: React.FC<PassengerModalProps> = ({
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
               <Phone className="w-3.5 h-3.5 text-slate-400" />
-              Số Điện Thoại (Không bắt buộc)
+              Số Điện Thoại
             </label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               placeholder="Ví dụ: 0912xxxxxx"
+              className="w-full px-3 py-2 border border-slate-200 bg-slate-50 focus:bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-slate-800"
+            />
+          </div>
+
+          {/* Citizen ID (CCCD) */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
+              <IdCard className="w-3.5 h-3.5 text-slate-400" />
+              Số CCCD (Chăm sóc khách hàng)
+            </label>
+            <input
+              type="text"
+              value={cccd}
+              onChange={(e) => setCccd(e.target.value)}
+              placeholder="Ví dụ: 0350xxxxxxxx hoặc số hộ chiếu"
+              className="w-full px-3 py-2 border border-slate-200 bg-slate-50 focus:bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-slate-800"
+            />
+          </div>
+
+          {/* Travel Date */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              Ngày Đi <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              required
+              value={travelDate}
+              onChange={(e) => setTravelDate(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 bg-slate-50 focus:bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-slate-800"
+            />
+          </div>
+
+          {/* Pick-up Point */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5 text-red-500" />
+              Điểm Đón Hành Khách <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={pickupPoint}
+              onChange={(e) => setPickupPoint(e.target.value)}
+              placeholder="BX xuất phát hoặc địa chỉ dọc đường"
               className="w-full px-3 py-2 border border-slate-200 bg-slate-50 focus:bg-white rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all text-slate-800"
             />
           </div>

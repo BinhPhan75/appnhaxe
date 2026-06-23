@@ -23,6 +23,8 @@ import {
 import { BerthMap } from './components/BerthMap';
 import { PassengerModal } from './components/PassengerModal';
 import { Dashboard } from './components/Dashboard';
+import AdminPanel from './components/AdminPanel';
+import { ConductorMap } from './components/ConductorMap';
 import { 
   Wifi, 
   WifiOff, 
@@ -41,16 +43,24 @@ import {
   BookmarkCheck,
   CheckCircle2,
   Trash2,
-  Share2
+  Share2,
+  UserCog
 } from 'lucide-react';
 
 export default function App() {
-  // Roles toggles: 'conductor' (phụ xe) or 'dispatcher' (điều hành bến)
-  const [activeRole, setActiveRole] = useState<'conductor' | 'dispatcher'>('conductor');
+  // Roles toggles: 'conductor' (phụ xe), 'dispatcher' (điều hành bến) or 'admin' (quản trị nhà xe)
+  const [activeRole, setActiveRole] = useState<'conductor' | 'dispatcher' | 'admin'>('conductor');
 
   // Selected trip route configurations
   const [selectedTrip, setSelectedTrip] = useState<TripConfig>(VIETNAM_ROUTES[0]);
   const [capacity, setCapacity] = useState<number>(34); // Capacity choices: 22, 34, 41
+
+  // Staff and Vehicle parameters
+  const [licensePlate, setLicensePlate] = useState<string>('51B-222.88');
+  const [driverName, setDriverName] = useState<string>('Nguyễn Văn Đạt');
+  const [driverPhone, setDriverPhone] = useState<string>('0901235566');
+  const [conductorName, setConductorName] = useState<string>('Lê Hoàng Quân');
+  const [conductorPhone, setConductorPhone] = useState<string>('0933556677');
 
   // Primary state sync'd with Server in real-time
   const [berths, setBerths] = useState<Berth[]>([]);
@@ -64,6 +74,7 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
   const [outbox, setOutbox] = useState<SyncTransaction[]>([]);
   const [customers, setCustomers] = useState<CustomerHistory[]>(MOCK_CUSTOMERS);
+  const [buses, setBuses] = useState<any[]>([]);
 
   // UI state
   const [selectedBerthForBooking, setSelectedBerthForBooking] = useState<{ id: string; label: string } | null>(null);
@@ -80,12 +91,20 @@ export default function App() {
   const fetchStateFromServer = async () => {
     if (isOffline) return; // Block API fetches when intentionally working offline
     try {
-      const res = await fetch('/api/state');
+      const res = await fetch(`/api/state?tripId=${selectedTrip.id}`);
       if (res.ok) {
         const data = await res.json();
         setBerths(data.berths);
         setCapacity(data.layoutCapacity);
         
+        // Load dynamically in real time
+        if (data.licensePlate) setLicensePlate(data.licensePlate);
+        if (data.driverName) setDriverName(data.driverName);
+        if (data.driverPhone) setDriverPhone(data.driverPhone);
+        if (data.conductorName) setConductorName(data.conductorName);
+        if (data.conductorPhone) setConductorPhone(data.conductorPhone);
+        if (data.buses) setBuses(data.buses);
+
         // Only pull location from server if we are NOT simulating on this screen
         if (!isSimulating) {
           setCurrentLocation(data.currentLocation);
@@ -193,10 +212,10 @@ export default function App() {
     // Reset berths with some seeded passengers for the new route
     if (!isOffline) {
       try {
-        await fetch('/api/layout', {
+        await fetch(`/api/layout?tripId=${tripId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ capacity })
+          body: JSON.stringify({ capacity, tripId })
         });
       } catch (err) {
         console.warn("Failure telling server about trip change", err);
@@ -213,10 +232,10 @@ export default function App() {
 
     if (!isOffline) {
       try {
-        await fetch('/api/layout', {
+        await fetch(`/api/layout?tripId=${selectedTrip.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ capacity: newCap })
+          body: JSON.stringify({ capacity: newCap, tripId: selectedTrip.id })
         });
         fetchStateFromServer();
       } catch (e) {
@@ -281,6 +300,40 @@ export default function App() {
         console.warn("Direct post failed, buffering booking to outbox", e);
       }
     }
+  };
+
+  const handleSaveBusInfo = async (info: {
+    licensePlate: string;
+    driverName: string;
+    driverPhone: string;
+    conductorName: string;
+    conductorPhone: string;
+  }) => {
+    setLicensePlate(info.licensePlate);
+    setDriverName(info.driverName);
+    setDriverPhone(info.driverPhone);
+    setConductorName(info.conductorName);
+    setConductorPhone(info.conductorPhone);
+
+    if (!isOffline) {
+      try {
+        await fetch('/api/bus-info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(info)
+        });
+        playSuccessBeep();
+      } catch (err) {
+        console.warn("Could not save bus info to server", err);
+      }
+    }
+  };
+
+  const handleUpdateWaypoints = (newWaypoints: any[]) => {
+    setSelectedTrip(prev => ({
+      ...prev,
+      waypoints: newWaypoints
+    }));
   };
 
   const handleToggleStatus = async (berthId: string, status: BerthStatus) => {
@@ -378,7 +431,7 @@ export default function App() {
 
     // Propagate simulation coordinates to server in background so remote office dashboards can display it
     if (!isOffline && isSimulating) {
-      fetch('/api/location', {
+      fetch(`/api/location?tripId=${selectedTrip.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -386,7 +439,8 @@ export default function App() {
           lng: coords.lng,
           speed: speedKmh,
           isSimulating,
-          progress: simulationProgress
+          progress: simulationProgress,
+          tripId: selectedTrip.id
         })
       }).catch(err => console.debug("GPS update buffering", err));
     }
@@ -395,33 +449,84 @@ export default function App() {
     // Scan all registered passengers currently on board (booked/approaching)
     const nextBerths = berths.map(b => {
       if (b.passenger && (b.status === 'booked' || b.status === 'approaching')) {
-        const passengerCoords = b.passenger.coords;
-        const distKm = getDistanceKm(coords.lat, coords.lng, passengerCoords.lat, passengerCoords.lng);
+        const p = b.passenger;
 
-        if (distKm <= 5.0) {
-          // Trigger alert if not previously announced
-          const uniqueKey = `${b.id}_${b.passenger.name}`;
-          if (!announcedDestinations.current.has(uniqueKey)) {
-            announcedDestinations.current.add(uniqueKey);
-            
-            // Set dynamic warning alert banners
-            setActiveAlarm(`Sắp trả khách ${b.passenger.name} tại trạm: ${b.passenger.destination} (Cách ${distKm.toFixed(1)} km)`);
-            
-            // play double alarm chime
-            playProximityAlert();
-            
-            // Synthesize clear audio speaker announcement in natural Vietnamese
-            speakVietnamese(`Chú ý phụ xe, chuẩn bị trả khách ${b.passenger.name} xuống tại ${b.passenger.destination}. Khoảng cách còn lại năm ki lô mét.`);
-            
-            // Auto dismiss alert banner after 8 seconds
-            setTimeout(() => setActiveAlarm(null), 8500);
+        // Find pickup and dropoff waypoints
+        const pickupWp = selectedTrip.waypoints.find(wp => 
+          p.pickupPoint && wp.name.toLowerCase().includes(p.pickupPoint.toLowerCase())
+        ) || selectedTrip.waypoints[0];
+        const pickupCoords = pickupWp.coords;
+        const pickupKm = pickupWp.distanceKm;
+
+        const dropoffWp = selectedTrip.waypoints.find(wp => 
+          wp.name.toLowerCase().includes(p.destination.toLowerCase())
+        ) || selectedTrip.waypoints[selectedTrip.waypoints.length - 1];
+        const dropoffCoords = p.coords || dropoffWp.coords;
+        const dropoffKm = dropoffWp.distanceKm;
+
+        const totalRouteKm = selectedTrip.waypoints[selectedTrip.waypoints.length - 1].distanceKm;
+        const currentKm = (simulationProgress / 100) * totalRouteKm;
+
+        // 1. Pickup Warning (within 5km of pickup, before passing it)
+        if (currentKm < pickupKm + 2.5) {
+          const distPickupKm = getDistanceKm(coords.lat, coords.lng, pickupCoords.lat, pickupCoords.lng);
+          if (distPickupKm <= 5.0) {
+            const uniqueKeyPickup = `${b.id}_pickup_${p.name}`;
+            if (!announcedDestinations.current.has(uniqueKeyPickup)) {
+              announcedDestinations.current.add(uniqueKeyPickup);
+              
+              // Set warning banner exactly according to Vietnamese syntax:
+              // "Khách [tenkhach] đón tại [vitri] cách [khoảng cách còn lại]"
+              const alarmMsg = `Khách ${p.name} đón tại ${pickupWp.name} cách ${distPickupKm.toFixed(1)} km`;
+              setActiveAlarm(alarmMsg);
+              
+              // play double alarm chime
+              playProximityAlert();
+              
+              // Play Vietnamese Speech Audio Notice
+              speakVietnamese(`Khách ${p.name} đón tại ${pickupWp.name} cách ${distPickupKm.toFixed(1)} ki lô mét`);
+              
+              // Auto dismiss alert banner after 8 seconds
+              setTimeout(() => setActiveAlarm(null), 8500);
+            }
+
+            // Return modified status
+            return {
+              ...b,
+              status: 'approaching' as BerthStatus
+            };
           }
+        }
 
-          // Return modified status
-          return {
-            ...b,
-            status: 'approaching' as BerthStatus
-          };
+        // 2. Dropoff Warning (within 5km of dropoff, after pickup)
+        if (currentKm >= pickupKm) {
+          const distDropoffKm = getDistanceKm(coords.lat, coords.lng, dropoffCoords.lat, dropoffCoords.lng);
+          if (distDropoffKm <= 5.0) {
+            const uniqueKeyDropoff = `${b.id}_dropoff_${p.name}`;
+            if (!announcedDestinations.current.has(uniqueKeyDropoff)) {
+              announcedDestinations.current.add(uniqueKeyDropoff);
+              
+              // Set warning banner exactly according to Vietnamese syntax:
+              // "Khách [tenkhach] trả tại [vitri] cách [khoảng cách còn lại]"
+              const alarmMsg = `Khách ${p.name} trả tại ${dropoffWp.name} cách ${distDropoffKm.toFixed(1)} km`;
+              setActiveAlarm(alarmMsg);
+              
+              // play double alarm chime
+              playProximityAlert();
+              
+              // Play Vietnamese Speech Audio Notice
+              speakVietnamese(`Khách ${p.name} trả tại ${dropoffWp.name} cách ${distDropoffKm.toFixed(1)} ki lô mét`);
+              
+              // Auto dismiss alert banner after 8 seconds
+              setTimeout(() => setActiveAlarm(null), 8500);
+            }
+
+            // Return modified status
+            return {
+              ...b,
+              status: 'approaching' as BerthStatus
+            };
+          }
         }
       }
       return b;
@@ -559,12 +664,12 @@ export default function App() {
           </div>
 
           {/* Role and Coordination Tabs Switcher */}
-          <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-full md:w-auto">
+          <div className="flex flex-wrap bg-slate-100 p-1.5 rounded-xl border border-slate-200 gap-1 w-full md:w-auto">
             <button
               onClick={() => setActiveRole('conductor')}
-              className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 activeRole === 'conductor' 
-                  ? 'bg-white text-red-600 shadow-sm font-black' 
+                  ? 'bg-white text-red-600 shadow-xs font-black' 
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -573,21 +678,32 @@ export default function App() {
             </button>
             <button
               onClick={() => setActiveRole('dispatcher')}
-              className={`flex-1 md:flex-none px-5 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 activeRole === 'dispatcher' 
-                  ? 'bg-white text-red-600 shadow-sm font-black' 
+                  ? 'bg-white text-red-600 shadow-xs font-black' 
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               <TrendingUp className="w-4 h-4" />
               ĐIỀU HÀNH BẾN (DASHBOARD & HÀNH TRÌNH)
             </button>
+            <button
+              onClick={() => setActiveRole('admin')}
+              className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeRole === 'admin' 
+                  ? 'bg-white text-red-600 shadow-xs font-black' 
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <UserCog className="w-4 h-4" />
+              QUẢN TRỊ NHÀ XE BH (SYSTEM & CRM)
+            </button>
           </div>
 
         </div>
 
         {/* Dynamic active role visual layout */}
-        {activeRole === 'driver' || activeRole === 'conductor' ? (
+        {activeRole === 'conductor' ? (
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             
@@ -717,6 +833,13 @@ export default function App() {
             {/* Berth layouts core panels */}
             <div className="lg:col-span-8 flex flex-col gap-6">
               
+              <ConductorMap 
+                currentLocation={currentLocation}
+                berths={berths}
+                tripConfig={selectedTrip}
+                speed={speedKmh}
+              />
+
               <BerthMap 
                 berths={berths} 
                 capacity={capacity}
@@ -729,7 +852,7 @@ export default function App() {
 
           </div>
 
-        ) : (
+        ) : activeRole === 'dispatcher' ? (
           
           // Office and operator visual dashboard
           <Dashboard 
@@ -741,11 +864,31 @@ export default function App() {
               isOffline,
               isSimulating,
               simulationProgress,
-              speed: speedKmh
+              speed: speedKmh,
+              licensePlate,
+              driverName,
+              driverPhone,
+              conductorName,
+              conductorPhone
             }}
             tripConfig={selectedTrip}
             customerHistory={customers}
+            buses={buses}
+            onSelectTrip={handleTripChange}
             onSearchCustomer={(val) => {}}
+            onUpdateWaypoints={handleUpdateWaypoints}
+          />
+
+        ) : (
+
+          // Admin panel configuration page
+          <AdminPanel
+            licensePlate={licensePlate}
+            driverName={driverName}
+            driverPhone={driverPhone}
+            conductorName={conductorName}
+            conductorPhone={conductorPhone}
+            onSaveBusInfo={handleSaveBusInfo}
           />
 
         )}

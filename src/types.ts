@@ -16,8 +16,11 @@ export interface Waypoint {
 export interface Passenger {
   name: string;
   phone?: string;
-  destination: string;
+  destination: string; // This is the dropoffPoint
   coords: Coords;
+  cccd?: string;
+  travelDate?: string;
+  pickupPoint?: string;
 }
 
 export interface Berth {
@@ -68,4 +71,9 @@ export interface BusState {
   isSimulating: boolean;
   simulationProgress: number; // 0 to 100
   speed: number; // km/h
+  licensePlate?: string;
+  driverName?: string;
+  driverPhone?: string;
+  conductorName?: string;
+  conductorPhone?: string;
 }
