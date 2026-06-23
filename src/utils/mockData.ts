@@ -4,7 +4,7 @@ import { TripConfig, CustomerHistory, Berth, FloorType, RowType, Waypoint } from
 export const VIETNAM_ROUTES: TripConfig[] = [
   {
     id: 'sg-dl',
-    name: 'Sài Gòn - Đà Lạt (Nhà Xe Phương Trang)',
+    name: 'Sài Gòn - Đà Lạt (Nhà Xe BH)',
     route: 'Sài Gòn - Đà Lạt',
     startName: 'BX Miền Tây (Sài Gòn)',
     endName: 'BX Liên Tỉnh Đà Lạt',

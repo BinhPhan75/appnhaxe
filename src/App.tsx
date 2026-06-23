@@ -116,7 +116,7 @@ export default function App() {
 
   // Handle Offline state local storage persistence representation
   useEffect(() => {
-    const savedOutbox = localStorage.getItem('FUTA_SYNC_OUTBOX');
+    const savedOutbox = localStorage.getItem('BH_SYNC_OUTBOX');
     if (savedOutbox) {
       setOutbox(JSON.parse(savedOutbox));
     }
@@ -124,7 +124,7 @@ export default function App() {
 
   const saveOutboxToStorage = (updatedOutbox: SyncTransaction[]) => {
     setOutbox(updatedOutbox);
-    localStorage.setItem('FUTA_SYNC_OUTBOX', JSON.stringify(updatedOutbox));
+    localStorage.setItem('BH_SYNC_OUTBOX', JSON.stringify(updatedOutbox));
   };
 
   // Synchronize outbox transactional queue with Express backend when online
@@ -442,11 +442,11 @@ export default function App() {
       <header className="bg-slate-900 text-white px-5 py-4 flex flex-col md:flex-row items-center justify-between shadow-md border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div className="bg-red-650 h-10 w-10 bg-red-600 rounded-xl flex items-center justify-center font-bold text-lg text-white shadow-md border border-red-500">
-            FUTA
+            BH
           </div>
           <div>
             <h1 className="text-sm font-black uppercase tracking-wider text-slate-100 flex items-center gap-1.5">
-              FUTA BUS LINES CO-COORDINATOR
+              BH BUS LINES CO-COORDINATOR
               <span className="bg-red-600 text-white font-extrabold text-[9px] px-1.5 py-0.5 rounded tracking-normal">
                 VIP
               </span>
@@ -765,7 +765,7 @@ export default function App() {
 
       {/* Aesthetic Footer */}
       <footer className="bg-slate-900 border-t border-slate-800 mt-12 py-6 text-slate-400 px-5 text-center text-xs">
-        <p className="font-semibold text-slate-300">© 2026 FUTA Bus Corporation. Bản quyền thuộc về Nhà Xe Phương Trang.</p>
+        <p className="font-semibold text-slate-300">© 2026 BH Bus Corporation. Bản quyền thuộc về Nhà Xe BH.</p>
         <p className="mt-1.5 text-slate-500 max-w-xl mx-auto leading-relaxed">
           Định vị vệ tinh 4G liên tục được phát qua Express &rarr; Vite. Hệ thống lưu trữ bảo vệ ngoại tuyến an toàn khi xe di chuyển qua khu vực mất sóng (Đèo Bảo Lộc, Vùng Cao Di Linh) và đồng bộ trực tuyến khi có kết nối hoàn bến.
         </p>

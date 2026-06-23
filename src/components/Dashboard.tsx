@@ -135,7 +135,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       })
       .bindPopup(`
         <div class="p-1 font-sans">
-          <p class="font-bold text-red-600 text-sm">XE KHÁCH PHƯƠNG TRANG</p>
+          <p class="font-bold text-red-600 text-sm">XE KHÁCH BH</p>
           <p class="text-xs text-slate-705 font-medium mt-0.5">Tuyến: ${tripConfig.route}</p>
           <p class="text-xs text-slate-705 font-medium">Tốc độ giả lập: ${busState.speed} km/h</p>
         </div>

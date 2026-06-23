@@ -51,13 +51,13 @@ export const BerthMap: React.FC<BerthMapProps> = ({
           <p className="text-xs text-slate-500 mt-0.5">Màu sắc thay đổi theo trạng thái hoạt động của hành khách</p>
         </div>
         <div className="flex items-center gap-2">
-          {/* FUTA reference images modal button */}
+          {/* BH reference images modal button */}
           <button
             onClick={() => setShowRefImages(!showRefImages)}
             className="flex items-center gap-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-700 text-xs py-1.5 rounded-lg font-medium border border-red-200 transition-colors"
           >
             <Eye className="w-3.5 h-3.5" />
-            {showRefImages ? "Ẩn ảnh FUTA" : "Sơ đồ FUTA thực tế"}
+            {showRefImages ? "Ẩn ảnh BH" : "Sơ đồ BH thực tế"}
           </button>
         </div>
       </div>
@@ -65,7 +65,7 @@ export const BerthMap: React.FC<BerthMapProps> = ({
       {showRefImages && (
         <div className="mt-4 bg-red-50/50 p-4 rounded-xl border border-red-100 transition-all duration-300">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold text-red-900 uppercase tracking-wider">Tài liệu tham khảo sơ đồ Phương Trang (FUTA)</h3>
+            <h3 className="text-xs font-bold text-red-900 uppercase tracking-wider">Tài liệu tham khảo sơ đồ BH</h3>
             <span className="text-[10px] text-red-700 font-mono">Trang {selectedImg + 1}/5</span>
           </div>
           <div className="flex flex-wrap gap-1.5 mb-3">
