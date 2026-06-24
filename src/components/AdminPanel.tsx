@@ -31,6 +31,8 @@ interface BookedPassengerLog {
 interface SupabaseConfig {
   isConfigured: boolean;
   supabaseUrl: string;
+  isBusRoutesTableMissing?: boolean;
+  isPassengerBookingsTableMissing?: boolean;
 }
 
 const VIETNAM_TERMINALS = [
@@ -816,6 +818,25 @@ CREATE TABLE bus_routes (
                   <p className="text-xs font-black text-amber-800">Offline Fallback (RAM logs active)</p>
                   <p className="text-[10px] text-amber-600 mt-0.5">
                     Hệ thống đang lưu trữ trực tiếp vào danh sách bộ nhớ tạm phía server. Cấu hình SUPABASE_URL & SUPABASE_ANON_KEY trong file .env để kết nối cloud hoàn chỉnh!
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {supaConfig.isConfigured && (supaConfig.isBusRoutesTableMissing || supaConfig.isPassengerBookingsTableMissing) && (
+              <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-lg flex items-start gap-2.5 shadow-2xs">
+                <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-[10px] font-black text-amber-800 uppercase tracking-tight">⚠️ THIẾU BẢNG TRONG SUPABASE</p>
+                  <p className="text-[10px] text-amber-700 mt-1 leading-normal">
+                    {supaConfig.isBusRoutesTableMissing && supaConfig.isPassengerBookingsTableMissing 
+                      ? 'Hai bảng (passenger_bookings & bus_routes) chưa được tìm thấy trong cơ sở dữ liệu Supabase của bạn.' 
+                      : supaConfig.isBusRoutesTableMissing 
+                        ? 'Bảng tuyến đường xe (bus_routes) chưa tồn tại trong cơ sở dữ liệu Supabase của bạn.' 
+                        : 'Bảng khách đặt chỗ (passenger_bookings) chưa tồn tại trong cơ sở dữ liệu Supabase của bạn.'}
+                  </p>
+                  <p className="text-[9px] text-slate-500 mt-1.5 font-medium leading-normal">
+                    Hãy bấm nút <strong className="text-slate-700">Sao chép</strong> ở bảng tương ứng phía dưới, dán và chạy SQL trong <strong className="text-slate-700">SQL Editor</strong> của bảng điều khiển Supabase của bạn!
                   </p>
                 </div>
               </div>

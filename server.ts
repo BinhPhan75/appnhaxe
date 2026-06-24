@@ -333,6 +333,31 @@ let buses: Record<string, any> = {
 let busState = buses['sg-dl'];
 
 // --- SUPABASE BUS PERSISTENCE HELPERS ---
+let isBusRoutesTableMissing = false;
+let isPassengerBookingsTableMissing = false;
+
+function checkAndHandleTableError(error: any, tableName: 'bus_routes' | 'passenger_bookings'): boolean {
+  if (!error) return false;
+  
+  const isMissing = error.code === '42P01' || 
+                    (error.message && (
+                      error.message.includes('relation') || 
+                      error.message.includes('does not exist') || 
+                      error.message.includes('schema cache') ||
+                      error.message.includes('not found')
+                    ));
+  
+  if (isMissing) {
+    if (tableName === 'bus_routes') {
+      isBusRoutesTableMissing = true;
+    } else {
+      isPassengerBookingsTableMissing = true;
+    }
+    return true;
+  }
+  return false;
+}
+
 async function seedDefaultBusesToSupabase() {
   if (!supabase) return;
   try {
@@ -366,13 +391,18 @@ async function seedDefaultBusesToSupabase() {
         berths: b.berths
       }]);
       if (error) {
-        console.warn(`Could not seed bus ${b.tripId} into Supabase (it may already exist):`, error.message);
+        if (checkAndHandleTableError(error, 'bus_routes')) {
+          console.log(`ℹ️ [Supabase Info] Bảng 'bus_routes' chưa tồn tại trong cơ sở dữ liệu. Vui lòng chạy tập lệnh SQL Schema trong Admin Panel.`);
+          return;
+        } else {
+          console.warn(`Could not seed bus ${b.tripId} into Supabase (it may already exist):`, error.message);
+        }
       } else {
         console.log(`Seeded bus ${b.tripId} into Supabase successfully.`);
       }
     }
   } catch (err: any) {
-    console.error('Exception seeding default buses:', err.message);
+    console.warn('Exception seeding default buses:', err.message);
   }
 }
 
@@ -381,7 +411,11 @@ async function syncBusesFromSupabase() {
   try {
     const { data, error } = await supabase.from('bus_routes').select('*');
     if (error) {
-      console.warn('⚠️ Could not fetch from bus_routes, table might not exist in Supabase yet. Using local RAM state.', error.message);
+      if (checkAndHandleTableError(error, 'bus_routes')) {
+        console.log(`ℹ️ [Supabase Info] Bảng 'bus_routes' chưa tồn tại. Sử dụng dữ liệu in-memory RAM.`);
+      } else {
+        console.warn('⚠️ Could not fetch from bus_routes, table might not exist in Supabase yet. Using local RAM state.', error.message);
+      }
       return;
     }
     if (data && data.length > 0) {
@@ -427,7 +461,7 @@ async function syncBusesFromSupabase() {
       await seedDefaultBusesToSupabase();
     }
   } catch (err: any) {
-    console.error('Exception syncing buses from Supabase:', err.message);
+    console.warn('Exception syncing buses from Supabase:', err.message);
   }
 }
 
@@ -459,12 +493,16 @@ async function saveBusToSupabase(bus: any) {
         berths: bus.berths || []
       }, { onConflict: 'trip_id' });
     if (error) {
-      console.error(`Error saving bus route ${bus.tripId} to Supabase:`, error.message);
+      if (checkAndHandleTableError(error, 'bus_routes')) {
+        console.log(`ℹ️ [Supabase Info] Bảng 'bus_routes' chưa tồn tại. Không thể lưu tuyến xe ${bus.tripId} lên Supabase.`);
+      } else {
+        console.warn(`Error saving bus route ${bus.tripId} to Supabase:`, error.message);
+      }
     } else {
       console.log(`Successfully saved/synced bus route ${bus.tripId} into Supabase!`);
     }
   } catch (err: any) {
-    console.error('Exception saving bus to Supabase:', err.message);
+    console.warn('Exception saving bus to Supabase:', err.message);
   }
 }
 
@@ -476,12 +514,16 @@ async function deleteBusFromSupabase(tripId: string) {
       .delete()
       .eq('trip_id', tripId);
     if (error) {
-      console.error(`Error deleting bus route ${tripId} from Supabase:`, error.message);
+      if (checkAndHandleTableError(error, 'bus_routes')) {
+        console.log(`ℹ️ [Supabase Info] Bảng 'bus_routes' chưa tồn tại. Không thể xóa tuyến xe ${tripId} khỏi Supabase.`);
+      } else {
+        console.warn(`Error deleting bus route ${tripId} from Supabase:`, error.message);
+      }
     } else {
       console.log(`Successfully deleted bus route ${tripId} from Supabase.`);
     }
   } catch (err: any) {
-    console.error('Exception deleting bus from Supabase:', err.message);
+    console.warn('Exception deleting bus from Supabase:', err.message);
   }
 }
 
@@ -763,12 +805,16 @@ app.post('/api/bookings', (req, res) => {
               trip_id: busState.tripId
             }]);
             if (error) {
-              console.error('Supabase write error on booking:', error.message);
+              if (checkAndHandleTableError(error, 'passenger_bookings')) {
+                console.log(`ℹ️ [Supabase Info] Bảng 'passenger_bookings' chưa tồn tại. Lưu vé vào bộ nhớ đệm RAM.`);
+              } else {
+                console.warn('Supabase write error on booking:', error.message);
+              }
             } else {
               console.log('Successfully saved customer booking in Supabase!');
             }
           } catch (e: any) {
-            console.error('Supabase async exception:', e.message);
+            console.warn('Supabase async exception:', e.message);
           }
         })();
       }
@@ -853,10 +899,17 @@ app.post('/api/sync', (req, res) => {
                   berth_id: berthId,
                   trip_id: busState.tripId
                 }]);
-                if (error) console.error('Supabase sync insert failed:', error.message);
-                else console.log('Successfully synchronized offline booking into Supabase!');
+                if (error) {
+                  if (checkAndHandleTableError(error, 'passenger_bookings')) {
+                    console.log(`ℹ️ [Supabase Info] Bảng 'passenger_bookings' chưa tồn tại trong quá trình đồng bộ.`);
+                  } else {
+                    console.warn('Supabase sync insert failed:', error.message);
+                  }
+                } else {
+                  console.log('Successfully synchronized offline booking into Supabase!');
+                }
               } catch (e: any) {
-                console.error('Supabase sync async exception:', e.message);
+                console.warn('Supabase sync async exception:', e.message);
               }
             })();
           }
@@ -910,6 +963,8 @@ app.get('/api/supabase-config', (req, res) => {
   res.json({
     isConfigured: !!supabase,
     supabaseUrl: SUPABASE_URL || 'Chưa cấu hình',
+    isBusRoutesTableMissing,
+    isPassengerBookingsTableMissing
   });
 });
 
@@ -938,7 +993,13 @@ app.get('/api/customer-logs', async (req, res) => {
         }));
         return res.json(formatted);
       } else {
-        if (error) console.warn('Supabase select logs error:', error.message);
+        if (error) {
+          if (checkAndHandleTableError(error, 'passenger_bookings')) {
+            console.log(`ℹ️ [Supabase Info] Bảng 'passenger_bookings' chưa tồn tại. Sử dụng bộ nhớ đệm RAM.`);
+          } else {
+            console.warn('Supabase select logs error:', error.message);
+          }
+        }
       }
     } catch (e: any) {
       console.warn('Supabase service unavailable, falling back to local logs:', e.message);
