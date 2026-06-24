@@ -418,9 +418,20 @@ async function syncBusesFromSupabase() {
       }
       return;
     }
+    
+    // Initialize newBuses with the current in-memory default buses so we never drop any of them
+    const newBuses: Record<string, any> = { ...buses };
+
+    // Make sure all default buses have berths initialized
+    for (const key of Object.keys(newBuses)) {
+      const b = newBuses[key];
+      if (!b.berths || b.berths.length === 0) {
+        initializeBerthsForBus(b, b.layoutCapacity);
+      }
+    }
+
     if (data && data.length > 0) {
       console.log(`Loaded ${data.length} active bus routes dynamically from Supabase!`);
-      const newBuses: Record<string, any> = {};
       data.forEach((row: any) => {
         newBuses[row.trip_id] = {
           tripId: row.trip_id,
@@ -445,20 +456,27 @@ async function syncBusesFromSupabase() {
           berths: row.berths || []
         };
       });
-      buses = newBuses;
-      
-      // Update global pointer reference
-      if (buses['sg-dl']) {
-        busState = buses['sg-dl'];
-      } else {
-        const firstId = Object.keys(buses)[0];
-        if (firstId) {
-          busState = buses[firstId];
-        }
+    }
+
+    buses = newBuses;
+
+    // Automatically seed/save any missing default routes back to Supabase
+    const loadedTripIds = data ? data.map((row: any) => row.trip_id) : [];
+    for (const key of Object.keys(buses)) {
+      if (!loadedTripIds.includes(key)) {
+        console.log(`Auto-seeding missing bus route ${key} to Supabase...`);
+        await saveBusToSupabase(buses[key]);
       }
+    }
+    
+    // Update global pointer reference
+    if (buses['sg-dl']) {
+      busState = buses['sg-dl'];
     } else {
-      console.log('ℹ️ Supabase bus_routes table exists but is empty. Seeding defaults...');
-      await seedDefaultBusesToSupabase();
+      const firstId = Object.keys(buses)[0];
+      if (firstId) {
+        busState = buses[firstId];
+      }
     }
   } catch (err: any) {
     console.warn('Exception syncing buses from Supabase:', err.message);

@@ -21,8 +21,11 @@ import {
   Calendar,
   ClipboardList,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Target,
+  Eye
 } from 'lucide-react';
+import { VIETNAM_ROUTES } from '../utils/mockData';
 
 interface DashboardProps {
   busState: BusState;
@@ -54,6 +57,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [customerSearch, setCustomerSearch] = useState('');
   const activeBuses = (buses && buses.length > 0) ? buses : [busState];
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [autoTrack, setAutoTrack] = useState(true);
+
+  const handleFitAllFleet = () => {
+    if (!mapRef.current || !activeBuses || activeBuses.length === 0) return;
+    setAutoTrack(false);
+    try {
+      const coords: [number, number][] = activeBuses.map(b => [b.currentLocation.lat, b.currentLocation.lng] as [number, number]);
+      if (tripConfig.startCoords) coords.push([tripConfig.startCoords.lat, tripConfig.startCoords.lng]);
+      if (tripConfig.endCoords) coords.push([tripConfig.endCoords.lat, tripConfig.endCoords.lng]);
+
+      const bounds = L.latLngBounds(coords);
+      mapRef.current.fitBounds(bounds, { padding: [50, 50] });
+    } catch (e) {
+      console.warn("Could not fit fleet bounds:", e);
+    }
+  };
 
   // Body scroll lock and map size invalidation when fullscreen toggle occurs
   useEffect(() => {
@@ -155,16 +174,20 @@ export const Dashboard: React.FC<DashboardProps> = ({
       attribution: '&copy; OpenStreetMap &copy; CARTO'
     }).addTo(mapRef.current);
 
-    // Initial Render of Path line
-    const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
-    routePolylinesRef.current[tripConfig.id] = L.polyline(coordsList, {
-      color: '#dc2626',
-      weight: 4,
-      opacity: 0.8,
-      dashArray: '5, 8'
-    }).addTo(mapRef.current);
+    // Initial Render of Path line for all routes to show the entire network
+    VIETNAM_ROUTES.forEach(route => {
+      const isFocusedRoute = route.id === tripConfig.id;
+      const coordsList = route.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
+      
+      routePolylinesRef.current[route.id] = L.polyline(coordsList, {
+        color: isFocusedRoute ? '#dc2626' : '#94a3b8',
+        weight: isFocusedRoute ? 4 : 2,
+        opacity: isFocusedRoute ? 0.8 : 0.4,
+        dashArray: isFocusedRoute ? '5, 8' : '3, 6'
+      }).addTo(mapRef.current!);
+    });
 
-    // Setup Start and end markers
+    // Setup Start and end markers for focused route
     L.marker([tripConfig.startCoords.lat, tripConfig.startCoords.lng])
       .bindPopup(`<p className="font-bold text-xs text-slate-800">Khởi Hành: ${tripConfig.waypoints[0]?.name || 'Bến Đi'}</p>`)
       .addTo(mapRef.current);
@@ -175,6 +198,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     // Fit map view
     try {
+      const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
       const bounds = L.latLngBounds(coordsList);
       mapRef.current.fitBounds(bounds, { padding: [30, 30] });
     } catch (e) {
@@ -187,6 +211,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         mapRef.current = null;
       }
       busesMarkersRef.current = {};
+      routePolylinesRef.current = {};
     };
   }, [tripConfig.id]);
 
@@ -284,9 +309,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     // Fly smoothly to track the actively simulating focus bus
-    const currentActiveBus = activeBuses.find(b => b.tripId === busState.tripId);
-    if (currentActiveBus && currentActiveBus.isSimulating) {
-      mapRef.current.panTo([currentActiveBus.currentLocation.lat, currentActiveBus.currentLocation.lng]);
+    if (autoTrack) {
+      const currentActiveBus = activeBuses.find(b => b.tripId === busState.tripId);
+      if (currentActiveBus && currentActiveBus.isSimulating) {
+        mapRef.current.panTo([currentActiveBus.currentLocation.lat, currentActiveBus.currentLocation.lng]);
+      }
     }
 
     // Clear old passenger markers first
@@ -329,7 +356,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
     });
 
-  }, [buses, busState.currentLocation, busState.berths, busState.tripId]);
+  }, [buses, busState.currentLocation, busState.berths, busState.tripId, autoTrack]);
 
   return (
     <div className="flex flex-col gap-6 w-full animate-fade-in" id="dashboard-system">
@@ -555,26 +582,51 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <p className="text-[11px] text-slate-400 mt-0.5">Toàn bộ lộ trình tự động cập nhật và thu hút GPS hành khách</p>
               </div>
               
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg">
+              <div className="flex items-center gap-2 flex-wrap md:flex-nowrap">
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 py-1.5 rounded-lg shrink-0">
                   <span className={`w-2 h-2 rounded-full ${busState.isOffline ? 'bg-slate-400' : 'bg-emerald-500 animate-pulse'}`}></span>
                   <span className="text-[10px] font-black text-slate-650 text-slate-600">{busState.isOffline ? 'Offline' : 'Realtime'}</span>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => setAutoTrack(!autoTrack)}
+                  className={`p-1.5 border rounded-lg transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold shrink-0 ${
+                    autoTrack 
+                      ? 'bg-red-50 border-red-200 text-red-650 text-red-600 hover:bg-red-100' 
+                      : 'bg-white border-slate-200 text-slate-600 hover:text-red-700 hover:bg-slate-50'
+                  }`}
+                  title={autoTrack ? "Tắt tự động bám theo xe đang chọn" : "Bật tự động bám theo xe đang chọn"}
+                >
+                  <Target className={`w-4 h-4 shrink-0 ${autoTrack ? 'animate-pulse text-red-600' : 'text-slate-500'}`} />
+                  <span className="hidden sm:inline">{autoTrack ? "Bám theo xe" : "Tự do"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleFitAllFleet}
+                  className="p-1.5 border border-slate-200 text-slate-650 hover:text-red-700 hover:bg-slate-50 rounded-lg transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold bg-white shrink-0"
+                  title="Tự động thu phóng bản đồ hiển thị toàn bộ đội xe đang chạy"
+                >
+                  <Eye className="w-4 h-4 text-slate-500 shrink-0" />
+                  <span className="hidden sm:inline">Xem toàn đội xe</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => setIsFullScreen(!isFullScreen)}
-                  className="p-1.5 border border-slate-200 text-slate-600 hover:text-red-700 hover:bg-slate-50 rounded-lg transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold"
+                  className="p-1.5 border border-slate-200 text-slate-600 hover:text-red-700 hover:bg-slate-50 rounded-lg transition-all shadow-xs flex items-center gap-1.5 text-xs font-bold shrink-0"
                   title={isFullScreen ? "Thu nhỏ" : "Toàn màn hình"}
                 >
                   {isFullScreen ? (
                     <>
                       <Minimize2 className="w-4 h-4 text-red-600 shrink-0" />
-                      <span>Thu nhỏ</span>
+                      <span className="hidden sm:inline">Thu nhỏ</span>
                     </>
                   ) : (
                     <>
                       <Maximize2 className="w-4 h-4 text-slate-500 shrink-0" />
-                      <span>Toàn màn hình</span>
+                      <span className="hidden sm:inline">Toàn màn hình</span>
                     </>
                   )}
                 </button>
