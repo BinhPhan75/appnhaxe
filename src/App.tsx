@@ -221,11 +221,12 @@ export default function App() {
   };
 
   // Route selector or Layout capacity overrides
-  const handleTripChange = async (tripId: string) => {
+  const handleTripChange = async (tripId: string, optionalBusesList?: any[]) => {
     let targetTrip = VIETNAM_ROUTES.find(r => r.id === tripId);
     
-    if (!targetTrip && buses) {
-      const b = buses.find(x => x.tripId === tripId);
+    const listToSearch = optionalBusesList || buses;
+    if (!targetTrip && listToSearch) {
+      const b = listToSearch.find(x => x.tripId === tripId);
       if (b) {
         const typeLabel = b.routeType === 'expressway' ? 'Cao Tốc' : b.routeType === 'other' ? 'Tuyến Tránh' : 'Quốc Lộ';
         targetTrip = {
@@ -355,6 +356,7 @@ export default function App() {
     startCoords?: { lat: number; lng: number };
     endCoords?: { lat: number; lng: number };
     status?: 'active' | 'inactive';
+    layoutCapacity?: number;
   }) => {
     if (info.tripId === selectedTrip.id) {
       setLicensePlate(info.licensePlate);
@@ -413,13 +415,15 @@ export default function App() {
             setCurrentLocation(b.currentLocation || { lat: 10.7494, lng: 106.6171 });
             setSimulationProgress(b.simulationProgress || 0);
           }
+          playSuccessBeep();
+          fetchStateFromServer();
+          return data.buses;
         }
-        playSuccessBeep();
-        fetchStateFromServer();
       } catch (err) {
         console.warn("Could not save bus info to server", err);
       }
     }
+    return undefined;
   };
 
   const handleDeleteTrip = async (tripId: string) => {

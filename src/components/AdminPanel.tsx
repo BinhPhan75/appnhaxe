@@ -80,8 +80,9 @@ interface AdminPanelProps {
     startCoords?: { lat: number; lng: number };
     endCoords?: { lat: number; lng: number };
     status?: 'active' | 'inactive';
-  }) => Promise<void>;
-  onSelectTrip?: (tripId: string) => void;
+    layoutCapacity?: number;
+  }) => Promise<any[] | undefined>;
+  onSelectTrip?: (tripId: string, optionalBusesList?: any[]) => void;
   onDeleteTrip?: (tripId: string) => Promise<void>;
   vehicles?: any[];
   onSaveVehicle?: (vehicle: any) => Promise<void>;
@@ -250,7 +251,11 @@ export default function AdminPanel({
       const startCoordsObj = startLat && startLng ? { lat: parseFloat(startLat), lng: parseFloat(startLng) } : undefined;
       const endCoordsObj = endLat && endLng ? { lat: parseFloat(endLat), lng: parseFloat(endLng) } : undefined;
 
-      await onSaveBusInfo({
+      // Extract capacity corresponding to the selected vehicle
+      const matchedVehicle = vehicles?.find(v => v.licensePlate === plates);
+      const capacityValue = matchedVehicle ? matchedVehicle.capacity : undefined;
+
+      const freshBuses = await onSaveBusInfo({
         tripId: activeId,
         licensePlate: plates,
         driverName: driver,
@@ -262,7 +267,8 @@ export default function AdminPanel({
         routeType: routeOption,
         startCoords: startCoordsObj,
         endCoords: endCoordsObj,
-        status: status
+        status: status,
+        layoutCapacity: capacityValue
       });
       setSaveSuccess(true);
       
@@ -270,11 +276,11 @@ export default function AdminPanel({
         setIsCreatingNew(false);
         setEditingTripId(activeId);
         if (onSelectTrip) {
-          onSelectTrip(activeId);
+          onSelectTrip(activeId, freshBuses);
         }
       } else {
         if (onSelectTrip && activeId === selectedTripId) {
-          onSelectTrip(activeId);
+          onSelectTrip(activeId, freshBuses);
         }
       }
       setTimeout(() => setSaveSuccess(false), 3000);

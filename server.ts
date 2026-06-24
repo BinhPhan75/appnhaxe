@@ -1204,17 +1204,22 @@ app.post('/api/bus-info', (req, res) => {
     routeType,
     startCoords,
     endCoords,
-    status
+    status,
+    layoutCapacity
   } = req.body;
   const targetTripId = tripId || busState.tripId;
   let activeBus = buses[targetTripId];
 
   if (!activeBus) {
+    const finalCapacity = layoutCapacity ? Number(layoutCapacity) : 34;
+    const finalStartCoords = startCoords || resolveCoords(startName || 'BX Miền Tây (Sài Gòn)', true);
+    const finalEndCoords = endCoords || resolveCoords(endName || 'BX Liên Tỉnh Đà Lạt', false);
+
     // Dynamic creation of a brand new route!
     activeBus = {
       tripId: targetTripId,
-      layoutCapacity: 34,
-      currentLocation: startCoords || { lat: 10.7494, lng: 106.6171 },
+      layoutCapacity: finalCapacity,
+      currentLocation: finalStartCoords,
       speed: status === 'inactive' ? 0 : 60,
       isSimulating: status !== 'inactive',
       isOffline: status === 'inactive',
@@ -1229,13 +1234,13 @@ app.post('/api/bus-info', (req, res) => {
       endName: endName || 'BX Liên Tỉnh Đà Lạt',
       routeType: routeType || 'national_highway',
       status: status || 'active',
-      startCoords: startCoords,
-      endCoords: endCoords,
+      startCoords: finalStartCoords,
+      endCoords: finalEndCoords,
       waypoints: []
     };
 
     // Build the dynamic intermediate stations
-    activeBus.waypoints = generateWaypointsByRoute(targetTripId, activeBus.startName, activeBus.endName, activeBus.routeType, startCoords, endCoords);
+    activeBus.waypoints = generateWaypointsByRoute(targetTripId, activeBus.startName, activeBus.endName, activeBus.routeType, finalStartCoords, finalEndCoords);
     if (activeBus.waypoints && activeBus.waypoints.length > 0) {
       activeBus.currentLocation = activeBus.waypoints[0].coords;
     }
@@ -1245,6 +1250,11 @@ app.post('/api/bus-info', (req, res) => {
 
     // Save into active pool
     buses[targetTripId] = activeBus;
+  }
+
+  if (layoutCapacity !== undefined && Number(layoutCapacity) !== activeBus.layoutCapacity) {
+    activeBus.layoutCapacity = Number(layoutCapacity);
+    initializeBerthsForBus(activeBus, activeBus.layoutCapacity);
   }
 
   if (licensePlate !== undefined) activeBus.licensePlate = licensePlate;
