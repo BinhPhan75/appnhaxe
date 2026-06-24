@@ -527,36 +527,166 @@ async function deleteBusFromSupabase(tripId: string) {
   }
 }
 
+// In-Memory state for Vehicles
+interface SavedVehicle {
+  licensePlate: string;
+  brand: string;
+  vehicleType: 'sleeper_22' | 'sleeper_34' | 'chair_45' | 'limo_9' | 'chair_16';
+  capacity: number;
+  registrationDate: string; // YYYY-MM-DD
+}
+
+let vehicles: SavedVehicle[] = [
+  {
+    licensePlate: '51B-222.88',
+    brand: 'Thaco',
+    vehicleType: 'sleeper_34',
+    capacity: 34,
+    registrationDate: '2025-07-15'
+  },
+  {
+    licensePlate: '65B-111.22',
+    brand: 'Kim Long',
+    vehicleType: 'sleeper_34',
+    capacity: 34,
+    registrationDate: '2025-06-01'
+  },
+  {
+    licensePlate: '79B-888.99',
+    brand: 'Hyundai',
+    vehicleType: 'sleeper_34',
+    capacity: 34,
+    registrationDate: '2025-08-20'
+  },
+  {
+    licensePlate: '51B-999.99',
+    brand: 'Kia',
+    vehicleType: 'sleeper_22',
+    capacity: 22,
+    registrationDate: '2026-06-10' // Expiring soon
+  }
+];
+
+let isVehiclesTableMissing = false;
+
+async function syncVehiclesFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data, error } = await supabase.from('vehicles').select('*');
+    if (error) {
+      if (error.code === '42P01' || (error.message && error.message.includes('not found'))) {
+        isVehiclesTableMissing = true;
+        console.log(`ℹ️ [Supabase Info] Bảng 'vehicles' chưa tồn tại. Sử dụng dữ liệu in-memory RAM.`);
+      } else {
+        console.warn('⚠️ Could not fetch from vehicles from Supabase. Using local RAM state.', error.message);
+      }
+      return;
+    }
+    if (data && data.length > 0) {
+      vehicles = data.map((v: any) => ({
+        licensePlate: v.license_plate,
+        brand: v.brand,
+        vehicleType: v.vehicle_type,
+        capacity: Number(v.capacity),
+        registrationDate: v.registration_date
+      }));
+      console.log(`Loaded ${data.length} vehicles from Supabase.`);
+    } else {
+      // Seed defaults
+      console.log('Seeding default vehicles to Supabase...');
+      for (const v of vehicles) {
+        await supabase.from('vehicles').insert([{
+          license_plate: v.licensePlate,
+          brand: v.brand,
+          vehicle_type: v.vehicleType,
+          capacity: v.capacity,
+          registration_date: v.registrationDate
+        }]);
+      }
+    }
+  } catch (err: any) {
+    console.warn('Exception syncing vehicles from Supabase:', err.message);
+  }
+}
+
+async function saveVehicleToSupabase(v: any) {
+  if (!supabase || isVehiclesTableMissing) return;
+  try {
+    await supabase.from('vehicles').upsert({
+      license_plate: v.licensePlate,
+      brand: v.brand,
+      vehicle_type: v.vehicleType,
+      capacity: v.capacity,
+      registration_date: v.registrationDate
+    }, { onConflict: 'license_plate' });
+  } catch (err: any) {
+    console.warn('Exception saving vehicle to Supabase:', err.message);
+  }
+}
+
+async function deleteVehicleFromSupabase(licensePlate: string) {
+  if (!supabase || isVehiclesTableMissing) return;
+  try {
+    await supabase.from('vehicles').delete().eq('license_plate', licensePlate);
+  } catch (err: any) {
+    console.warn('Exception deleting vehicle from Supabase:', err.message);
+  }
+}
+
 // Seed initial bookings for standard demo (so the stats aren't boring 0% when first loading!)
 function initializeBerthsForBus(bus: any, capacity: number) {
   const berths: SavedBerth[] = [];
   const floors: ('lower' | 'upper')[] = ['lower', 'upper'];
 
-  floors.forEach(floor => {
+  if (capacity === 45 || capacity === 16 || capacity === 9) {
+    // Single floor (lower only) for traditional coaches & limousines
     let count = 1;
-    const limit = capacity === 22 ? 4 : capacity === 34 ? 6 : 7;
-    const middleLimit = capacity === 22 ? 3 : capacity === 34 ? 5 : 6;
+    const colLetters = capacity === 45 ? ['A', 'B', 'C', 'D'] : ['A', 'B', 'C'];
+    const rowLimit = capacity === 45 ? 11 : capacity === 16 ? 5 : 3;
 
-    const rowALetter = floor === 'lower' ? 'A' : 'D';
-    const rowBLetter = floor === 'lower' ? 'B' : 'E';
-    const rowCLetter = floor === 'lower' ? 'C' : 'F';
+    colLetters.forEach(rowLetter => {
+      const limit = rowLetter === 'A' || rowLetter === 'C' ? rowLimit : rowLimit - 1;
+      for (let i = 1; i <= limit; i++) {
+        if (count <= capacity) {
+          berths.push({ id: `lower_${rowLetter}${count}`, label: `${rowLetter}${count}`, floor: 'lower', row: rowLetter as any, number: count, status: 'empty' });
+          count++;
+        }
+      }
+    });
 
-    // Row A (Left)
-    for (let i = 1; i <= limit; i++) {
-      berths.push({ id: `${floor}_${rowALetter}${count}`, label: `${rowALetter}${count}`, floor, row: rowALetter, number: count, status: 'empty' });
+    // Fill remaining up to capacity as G (back rows)
+    while (count <= capacity) {
+      berths.push({ id: `lower_G${count}`, label: `G${count}`, floor: 'lower', row: 'A', number: count, status: 'empty' });
       count++;
     }
-    // Row B (Middle)
-    for (let i = 1; i <= middleLimit; i++) {
-      berths.push({ id: `${floor}_${rowBLetter}${count}`, label: `${rowBLetter}${count}`, floor, row: rowBLetter, number: count, status: 'empty' });
-      count++;
-    }
-    // Row C (Right)
-    for (let i = 1; i <= limit; i++) {
-      berths.push({ id: `${floor}_${rowCLetter}${count}`, label: `${rowCLetter}${count}`, floor, row: rowCLetter, number: count, status: 'empty' });
-      count++;
-    }
-  });
+  } else {
+    // Double floor layout for VIP Cabin Slepers (22, 34, 41 berths)
+    floors.forEach(floor => {
+      let count = 1;
+      const limit = capacity === 22 ? 4 : capacity === 34 ? 6 : 7;
+      const middleLimit = capacity === 22 ? 3 : capacity === 34 ? 5 : 6;
+
+      const rowALetter = floor === 'lower' ? 'A' : 'D';
+      const rowBLetter = floor === 'lower' ? 'B' : 'E';
+      const rowCLetter = floor === 'lower' ? 'C' : 'F';
+
+      // Row A
+      for (let i = 1; i <= limit; i++) {
+        berths.push({ id: `${floor}_${rowALetter}${count}`, label: `${rowALetter}${count}`, floor, row: rowALetter, number: count, status: 'empty' });
+        count++;
+      }
+      // Row B
+      for (let i = 1; i <= middleLimit; i++) {
+        berths.push({ id: `${floor}_${rowBLetter}${count}`, label: `${rowBLetter}${count}`, floor, row: rowBLetter, number: count, status: 'empty' });
+        count++;
+      }
+      // Row C
+      for (let i = 1; i <= limit; i++) {
+        berths.push({ id: `${floor}_${rowCLetter}${count}`, label: `${rowCLetter}${count}`, floor, row: rowCLetter, number: count, status: 'empty' });
+        count++;
+      }
+    });
+  }
 
   // Seed mock passengers representing real-time passengers
   if (bus.tripId === 'sg-dl' && berths.length > 5) {
@@ -738,8 +868,57 @@ app.get('/api/state', (req, res) => {
   }
   res.json({
     ...busState,
-    buses: Object.values(buses)
+    buses: Object.values(buses),
+    vehicles: vehicles
   });
+});
+
+// GET: Fetch all registered vehicles
+app.get('/api/vehicles', (req, res) => {
+  res.json(vehicles);
+});
+
+// POST: Add or update a vehicle
+app.post('/api/vehicles', (req, res) => {
+  const { licensePlate, brand, vehicleType, capacity, registrationDate } = req.body;
+  if (!licensePlate) {
+    return res.status(400).json({ success: false, error: 'licensePlate is required' });
+  }
+
+  const existingIdx = vehicles.findIndex(v => v.licensePlate === licensePlate);
+  const vehicleObj = {
+    licensePlate,
+    brand: brand || 'Thaco',
+    vehicleType: vehicleType || 'sleeper_34',
+    capacity: Number(capacity) || 34,
+    registrationDate: registrationDate || new Date().toISOString().split('T')[0]
+  };
+
+  if (existingIdx !== -1) {
+    vehicles[existingIdx] = vehicleObj;
+  } else {
+    vehicles.push(vehicleObj);
+  }
+
+  // Persist to Supabase
+  saveVehicleToSupabase(vehicleObj);
+
+  res.json({ success: true, vehicles });
+});
+
+// POST: Delete a vehicle
+app.post('/api/vehicles/delete', (req, res) => {
+  const { licensePlate } = req.body;
+  if (!licensePlate) {
+    return res.status(400).json({ success: false, error: 'licensePlate is required' });
+  }
+
+  vehicles = vehicles.filter(v => v.licensePlate !== licensePlate);
+
+  // Persist to Supabase
+  deleteVehicleFromSupabase(licensePlate);
+
+  res.json({ success: true, vehicles });
 });
 
 // POST: Update layout capacity
@@ -1178,8 +1357,9 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', async () => {
     console.log(`Express custom server listening on port ${PORT}`);
-    // Sync buses from Supabase on startup
+    // Sync buses and vehicles from Supabase on startup
     await syncBusesFromSupabase();
+    await syncVehiclesFromSupabase();
   });
 }
 

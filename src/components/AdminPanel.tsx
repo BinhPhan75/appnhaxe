@@ -83,6 +83,9 @@ interface AdminPanelProps {
   }) => Promise<void>;
   onSelectTrip?: (tripId: string) => void;
   onDeleteTrip?: (tripId: string) => Promise<void>;
+  vehicles?: any[];
+  onSaveVehicle?: (vehicle: any) => Promise<void>;
+  onDeleteVehicle?: (licensePlate: string) => Promise<void>;
 }
 
 const FALLBACK_BUSES: Record<string, any> = {
@@ -126,7 +129,10 @@ export default function AdminPanel({
   selectedTripId,
   onSaveBusInfo,
   onSelectTrip,
-  onDeleteTrip
+  onDeleteTrip,
+  vehicles = [],
+  onSaveVehicle,
+  onDeleteVehicle
  }: AdminPanelProps) {
   const [editingTripId, setEditingTripId] = useState(selectedTripId);
 
@@ -167,6 +173,21 @@ export default function AdminPanel({
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedBusSql, setCopiedBusSql] = useState(false);
   const [activeSqlTab, setActiveSqlTab] = useState<'bookings' | 'routes'>('bookings');
+
+  // New tab navigation for AdminPanel
+  const [activeAdminTab, setActiveAdminTab] = useState<'routes' | 'fleet'>('routes');
+
+  // Fleet management states
+  const [vehiclePlates, setVehiclePlates] = useState('');
+  const [vehicleBrand, setVehicleBrand] = useState('Thaco');
+  const [vehicleType, setVehicleType] = useState<'sleeper_22' | 'sleeper_34' | 'chair_45' | 'limo_9' | 'chair_16'>('sleeper_34');
+  const [vehicleRegDate, setVehicleRegDate] = useState(new Date().toISOString().split('T')[0]);
+  const [vehicleSearch, setVehicleSearch] = useState('');
+  const [selectedVehicleForEdit, setSelectedVehicleForEdit] = useState<any | null>(null);
+  const [copiedVehicleSql, setCopiedVehicleSql] = useState(false);
+  const [previewFloor, setPreviewFloor] = useState<'lower' | 'upper'>('lower');
+  const [savingVehicle, setSavingVehicle] = useState(false);
+  const [saveVehicleSuccess, setSaveVehicleSuccess] = useState(false);
 
   // Sync state modifications based on route selection
   useEffect(() => {
@@ -331,6 +352,289 @@ CREATE TABLE bus_routes (
     setTimeout(() => setCopiedBusSql(false), 3000);
   };
 
+  const handleSaveVehicleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSaveVehicle || !vehiclePlates.trim()) return;
+    setSavingVehicle(true);
+    setSaveVehicleSuccess(false);
+
+    const capacityMap: Record<string, number> = {
+      'sleeper_22': 22,
+      'sleeper_34': 34,
+      'chair_45': 45,
+      'limo_9': 9,
+      'chair_16': 16
+    };
+
+    try {
+      await onSaveVehicle({
+        licensePlate: vehiclePlates.trim().toUpperCase(),
+        brand: vehicleBrand,
+        vehicleType,
+        capacity: capacityMap[vehicleType] || 34,
+        registrationDate: vehicleRegDate
+      });
+      setSaveVehicleSuccess(true);
+      
+      setVehiclePlates('');
+      setVehicleBrand('Thaco');
+      setVehicleType('sleeper_34');
+      setVehicleRegDate(new Date().toISOString().split('T')[0]);
+      setSelectedVehicleForEdit(null);
+
+      setTimeout(() => setSaveVehicleSuccess(false), 3000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingVehicle(false);
+    }
+  };
+
+  const handleEditVehicle = (veh: any) => {
+    setSelectedVehicleForEdit(veh);
+    setVehiclePlates(veh.licensePlate);
+    setVehicleBrand(veh.brand);
+    setVehicleType(veh.vehicleType);
+    setVehicleRegDate(veh.registrationDate);
+  };
+
+  const handleDeleteVehicleSubmit = async (plate: string) => {
+    if (window.confirm(`Bạn có chắc muốn xóa xe ${plate} khỏi đội xe?`)) {
+      if (onDeleteVehicle) {
+        await onDeleteVehicle(plate);
+      }
+    }
+  };
+
+  const copyVehicleSqlToClipboard = () => {
+    const rawSql = `-- Script SQL khởi tạo bảng quản lý đội xe và đăng kiểm BH
+CREATE TABLE vehicles (
+  license_plate text PRIMARY KEY,
+  brand text NOT NULL,
+  vehicle_type text NOT NULL,
+  capacity integer NOT NULL,
+  registration_date text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);`;
+    navigator.clipboard.writeText(rawSql);
+    setCopiedVehicleSql(true);
+    setTimeout(() => setCopiedVehicleSql(false), 3000);
+  };
+
+  const renderVehicleLayout = (type: string) => {
+    const isSleeper = type === 'sleeper_22' || type === 'sleeper_34';
+    
+    let seatsList: { id: string; label: string; row: string; number: number }[] = [];
+    
+    if (type === 'sleeper_22') {
+      const currentFloor = previewFloor;
+      const rowALetter = currentFloor === 'lower' ? 'A' : 'D';
+      const rowBLetter = currentFloor === 'lower' ? 'B' : 'E';
+      const rowCLetter = currentFloor === 'lower' ? 'C' : 'F';
+      
+      for (let i = 1; i <= 4; i++) seatsList.push({ id: `L_${rowALetter}${i}`, label: `${rowALetter}${i}`, row: 'Left', number: i });
+      for (let i = 1; i <= 3; i++) seatsList.push({ id: `M_${rowBLetter}${i}`, label: `${rowBLetter}${i}`, row: 'Middle', number: i });
+      for (let i = 1; i <= 4; i++) seatsList.push({ id: `R_${rowCLetter}${i}`, label: `${rowCLetter}${i}`, row: 'Right', number: i });
+    } else if (type === 'sleeper_34') {
+      const currentFloor = previewFloor;
+      const rowALetter = currentFloor === 'lower' ? 'A' : 'D';
+      const rowBLetter = currentFloor === 'lower' ? 'B' : 'E';
+      const rowCLetter = currentFloor === 'lower' ? 'C' : 'F';
+      
+      for (let i = 1; i <= 6; i++) seatsList.push({ id: `L_${rowALetter}${i}`, label: `${rowALetter}${i}`, row: 'Left', number: i });
+      for (let i = 1; i <= 5; i++) seatsList.push({ id: `M_${rowBLetter}${i}`, label: `${rowBLetter}${i}`, row: 'Middle', number: i });
+      for (let i = 1; i <= 6; i++) seatsList.push({ id: `R_${rowCLetter}${i}`, label: `${rowCLetter}${i}`, row: 'Right', number: i });
+    } else if (type === 'chair_45') {
+      for (let i = 1; i <= 11; i++) {
+        seatsList.push({ id: `A${i}`, label: `A${i}`, row: 'Col 1', number: i });
+        seatsList.push({ id: `B${i}`, label: `B${i}`, row: 'Col 2', number: i });
+        seatsList.push({ id: `C${i}`, label: `C${i}`, row: 'Col 3', number: i });
+        seatsList.push({ id: `D${i}`, label: `D${i}`, row: 'Col 4', number: i });
+      }
+      seatsList.push({ id: `G45`, label: `G45`, row: 'Col 1', number: 45 });
+    } else if (type === 'limo_9') {
+      seatsList.push({ id: `A1`, label: `A1`, row: 'Left', number: 1 });
+      seatsList.push({ id: `A2`, label: `A2`, row: 'Right', number: 2 });
+      seatsList.push({ id: `B3`, label: `B3`, row: 'Left', number: 3 });
+      seatsList.push({ id: `B4`, label: `B4`, row: 'Middle', number: 4 });
+      seatsList.push({ id: `B5`, label: `B5`, row: 'Right', number: 5 });
+      seatsList.push({ id: `C6`, label: `C6`, row: 'Left', number: 6 });
+      seatsList.push({ id: `C7`, label: `C7`, row: 'Right', number: 7 });
+      seatsList.push({ id: `D8`, label: `D8`, row: 'Left', number: 8 });
+      seatsList.push({ id: `D9`, label: `D9`, row: 'Right', number: 9 });
+    } else if (type === 'chair_16') {
+      for (let i = 1; i <= 5; i++) {
+        seatsList.push({ id: `A${i}`, label: `A${i}`, row: 'Col 1', number: i });
+        seatsList.push({ id: `B${i}`, label: `B${i}`, row: 'Col 2', number: i });
+        seatsList.push({ id: `C${i}`, label: `C${i}`, row: 'Col 3', number: i });
+      }
+      seatsList.push({ id: `G16`, label: `G16`, row: 'Col 1', number: 16 });
+    }
+
+    return (
+      <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 font-sans shadow-xl">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-4">
+          <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+            <span>✨ Sơ đồ xe:</span>
+            <span className="text-red-500 font-extrabold uppercase">
+              {type === 'sleeper_22' ? 'VIP Cabin 22 Phòng' :
+               type === 'sleeper_34' ? 'VIP Cabin 34 Phòng' :
+               type === 'chair_45' ? 'Ghế ngồi 45 Chỗ' :
+               type === 'limo_9' ? 'Limousine 9 Ghế' :
+               'Xe 16 Chỗ'}
+            </span>
+          </h4>
+
+          {isSleeper && (
+            <div className="flex gap-1.5 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700">
+              <button
+                type="button"
+                onClick={() => setPreviewFloor('lower')}
+                className={`px-2.5 py-1 text-[10px] font-black rounded-md uppercase transition-all ${
+                  previewFloor === 'lower' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Tầng Dưới
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewFloor('upper')}
+                className={`px-2.5 py-1 text-[10px] font-black rounded-md uppercase transition-all ${
+                  previewFloor === 'upper' ? 'bg-red-600 text-white shadow-xs' : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Tầng Trên
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Bus physical container */}
+        <div className="max-w-[280px] mx-auto bg-slate-950 rounded-t-3xl rounded-b-xl border-x border-t-2 border-b border-slate-800 p-4 relative">
+          
+          {/* Windshield */}
+          <div className="h-9 bg-slate-800/40 rounded-t-2xl border-b border-slate-800 flex items-center justify-between px-4 mb-4 text-slate-500 text-[10px] font-mono">
+            <span className="w-4 h-1.5 bg-slate-700 rounded-sm"></span>
+            <span className="text-[9px] uppercase font-bold text-slate-400 tracking-wider">Kính chắn gió</span>
+            <span className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse"></span>
+          </div>
+
+          {/* Dashboard and Driver Cabin */}
+          <div className="flex justify-between items-center px-4 pb-3 border-b border-slate-800 mb-4">
+            <div className="flex flex-col items-center">
+              <div className="w-5 h-5 rounded-full border-2 border-slate-700 flex items-center justify-center text-[8px] font-bold text-slate-500">
+                ⎔
+              </div>
+              <span className="text-[8px] text-slate-500 mt-0.5">Vô lăng</span>
+            </div>
+            <div className="bg-slate-800 px-2 py-1 rounded border border-slate-700 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span className="text-[8px] font-black text-slate-300 uppercase">Tài Xế</span>
+            </div>
+          </div>
+
+          {/* Grid display depending on coach layout */}
+          {type === 'sleeper_22' || type === 'sleeper_34' ? (
+            <div className="grid grid-cols-3 gap-3">
+              {/* Left Column */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[8px] text-center font-bold text-slate-600 uppercase tracking-widest border-b border-slate-900 pb-0.5">Dãy Trái</span>
+                {seatsList.filter(s => s.row === 'Left').map(s => (
+                  <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center text-xs font-black text-slate-300 shadow-md flex flex-col justify-between items-center h-11 relative">
+                    <span className="text-[10px] text-red-500 font-extrabold">{s.label}</span>
+                    <span className="text-[7px] text-slate-500 font-medium">Cabin VIP</span>
+                    <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-slate-800"></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Middle Column */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[8px] text-center font-bold text-slate-600 uppercase tracking-widest border-b border-slate-900 pb-0.5">Dãy Giữa</span>
+                {seatsList.filter(s => s.row === 'Middle').map(s => (
+                  <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center text-xs font-black text-slate-300 shadow-md flex flex-col justify-between items-center h-11 relative">
+                    <span className="text-[10px] text-slate-450 font-extrabold text-slate-400">{s.label}</span>
+                    <span className="text-[7px] text-slate-500 font-medium">Cabin VIP</span>
+                    <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-slate-800"></div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Right Column */}
+              <div className="flex flex-col gap-2">
+                <span className="text-[8px] text-center font-bold text-slate-600 uppercase tracking-widest border-b border-slate-900 pb-0.5">Dãy Phải</span>
+                {seatsList.filter(s => s.row === 'Right').map(s => (
+                  <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center text-xs font-black text-slate-300 shadow-md flex flex-col justify-between items-center h-11 relative">
+                    <span className="text-[10px] text-red-500 font-extrabold">{s.label}</span>
+                    <span className="text-[7px] text-slate-500 font-medium">Cabin VIP</span>
+                    <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-slate-800"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : type === 'chair_45' ? (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-4 gap-1.5">
+                {Array.from({ length: 11 }).map((_, rowIndex) => (
+                  <React.Fragment key={rowIndex}>
+                    {seatsList.filter(s => s.id !== 'G45' && s.number % 4 === (rowIndex * 4) % 4).slice(rowIndex * 4, rowIndex * 4 + 4).map(s => (
+                      <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-md p-1 py-1.5 text-center text-[10px] font-black text-slate-300 shadow-sm flex flex-col justify-center items-center">
+                        <span className="text-red-400">{s.label}</span>
+                        <span className="text-[6px] text-slate-550 text-slate-500">Ghế Ngồi</span>
+                      </div>
+                    ))}
+                  </React.Fragment>
+                ))}
+              </div>
+              <div className="grid grid-cols-5 gap-1 pt-1.5 border-t border-slate-900">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="bg-slate-900 border border-slate-800 rounded-md p-1 text-center text-[9px] font-black text-slate-300 shadow-sm">
+                    <span className="text-emerald-500">G{41 + i}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : type === 'limo_9' ? (
+            <div className="flex flex-col gap-3.5">
+              <div className="grid grid-cols-3 gap-3">
+                {seatsList.map(s => (
+                  <div key={s.id} className="bg-slate-900 border border-amber-900/30 rounded-lg p-2 text-center text-xs font-black text-amber-500 shadow-md flex flex-col justify-between items-center h-12 relative border-t-2 border-t-amber-600/50">
+                    <span className="text-[10px] font-extrabold">{s.label}</span>
+                    <span className="text-[7px] text-slate-400 font-medium">LIMO VIP</span>
+                    <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-500/20"></div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-3 gap-2">
+                {seatsList.filter(s => s.id !== 'G16').map(s => (
+                  <div key={s.id} className="bg-slate-900 border border-slate-800 rounded-lg p-2 text-center text-xs font-black text-slate-300 shadow-md flex flex-col justify-center items-center h-10">
+                    <span className="text-red-400 font-extrabold">{s.label}</span>
+                    <span className="text-[6px] text-slate-500">Tiêu Chuẩn</span>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-slate-900">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="bg-slate-900 border border-slate-800 rounded-md p-1 text-center text-[9px] font-black text-slate-300">
+                    <span className="text-red-400">G{13 + i}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="h-2 bg-slate-800 rounded-b-lg border-t border-slate-900 mt-4 text-[6px] text-center text-slate-600 font-mono">
+            CỬA THOÁT HIỂM SAU
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   const filteredLogs = crmLogs.filter(log => {
     const query = searchQuery.toLowerCase();
     return (
@@ -346,8 +650,35 @@ CREATE TABLE bus_routes (
   return (
     <div className="flex flex-col gap-6 w-full">
       
-      {/* MAIN ADMIN CONTENT GRID */}
-      <div id="admin-panel" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in">
+      {/* Sub-tab navigation for AdminPanel */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setActiveAdminTab('routes')}
+          className={`flex items-center gap-2 px-6 py-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+            activeAdminTab === 'routes'
+              ? 'border-red-600 text-red-600 bg-red-50/50'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <span>🗺️</span>
+          Quản lý Tuyến & Lộ trình
+        </button>
+        <button
+          onClick={() => setActiveAdminTab('fleet')}
+          className={`flex items-center gap-2 px-6 py-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+            activeAdminTab === 'fleet'
+              ? 'border-red-600 text-red-600 bg-red-50/50'
+              : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
+          }`}
+        >
+          <span>🚌</span>
+          Quản lý Đội xe & Đăng kiểm
+        </button>
+      </div>
+
+      {activeAdminTab === 'routes' ? (
+        <>
+          <div id="admin-panel" className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fade-in">
       
       {/* Left panel column: Setup and Supabase Info */}
       <div className="lg:col-span-5 flex flex-col gap-6">
@@ -665,17 +996,72 @@ CREATE TABLE bus_routes (
 
             <div className="flex flex-col gap-1.5 font-sans">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Biển Số Xe (Kiểm Soát)</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  value={plates}
-                  onChange={(e) => setPlates(e.target.value)}
-                  placeholder="Ví dụ: 51B-222.88"
-                  className="w-full bg-slate-50 border border-slate-205 border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
-                />
-                <Bus className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <div className="relative flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    required
+                    value={plates}
+                    onChange={(e) => setPlates(e.target.value)}
+                    placeholder="Ví dụ: 51B-222.88"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
+                  />
+                  <Bus className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                </div>
+                {vehicles && vehicles.length > 0 && (
+                  <select
+                    value={vehicles.some(v => v.licensePlate === plates) ? plates : ''}
+                    onChange={(e) => {
+                      const selectedPlate = e.target.value;
+                      if (selectedPlate) {
+                        setPlates(selectedPlate);
+                      }
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg px-2 text-xs font-extrabold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-red-500"
+                  >
+                    <option value="">-- Chọn từ Đội xe --</option>
+                    {vehicles.map(v => (
+                      <option key={v.licensePlate} value={v.licensePlate}>
+                        {v.licensePlate} ({v.brand})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
+              {(() => {
+                const vehicle = vehicles?.find(v => v.licensePlate === plates);
+                if (vehicle) {
+                  const regDate = new Date(vehicle.registrationDate);
+                  const expDate = new Date(regDate.getFullYear() + 1, regDate.getMonth(), regDate.getDate());
+                  const today = new Date('2026-06-24');
+                  const diffTime = expDate.getTime() - today.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                  if (diffDays <= 0) {
+                    return (
+                      <div className="text-[10px] bg-red-50 text-red-700 border border-red-250 border-red-200 px-2 py-1.5 rounded-md font-bold mt-1.5 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-red-600 animate-pulse" />
+                        <span>Cảnh báo Đăng kiểm: XE ĐÃ HẾT HẠN ({expDate.toISOString().split('T')[0]})!</span>
+                      </div>
+                    );
+                  } else if (diffDays <= 30) {
+                    return (
+                      <div className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1.5 rounded-md font-bold mt-1.5 flex items-center gap-1 animate-pulse">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Sắp hết hạn đăng kiểm trong {diffDays} ngày ({expDate.toISOString().split('T')[0]})!</span>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-100 px-2 py-1.5 rounded-md font-bold mt-1.5 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Đăng kiểm hoạt động an toàn (Hạn còn {diffDays} ngày).</span>
+                      </div>
+                    );
+                  }
+                }
+                return null;
+              })()}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -1211,7 +1597,392 @@ CREATE TABLE bus_routes (
         </table>
       </div>
     </div>
+    </>
+  ) : (
+    /* FLEET MANAGEMENT TAB */
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start animate-fade-in">
+      
+      {/* Left Column: Form & Live Layout Preview */}
+      <div className="xl:col-span-5 flex flex-col gap-6">
+        
+        {/* Form to Add / Edit Vehicles */}
+        <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 font-sans">
+          <div className="flex items-center gap-2 pb-3 border-b border-slate-100 mb-4">
+            <Bus className="w-5 h-5 text-red-600" />
+            <div>
+              <h3 className="font-extrabold text-sm text-slate-800 uppercase tracking-tight">
+                {selectedVehicleForEdit ? 'Cập Nhật Thông Tin Xe' : 'Đăng Ký Xe Mới'}
+              </h3>
+              <p className="text-[11px] text-slate-400">Thiết lập biển kiểm soát, thương hiệu, loại ghế/giường & ngày đăng kiểm gần nhất</p>
+            </div>
+          </div>
 
-  </div>
+          <form onSubmit={handleSaveVehicleSubmit} className="space-y-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Biển Số Xe (Kiểm Soát)</label>
+              <input
+                type="text"
+                required
+                value={vehiclePlates}
+                onChange={(e) => setVehiclePlates(e.target.value)}
+                placeholder="Ví dụ: 51B-123.45"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 uppercase font-mono"
+                disabled={!!selectedVehicleForEdit}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Thương Hiệu</label>
+                <select
+                  value={vehicleBrand}
+                  onChange={(e) => setVehicleBrand(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+                >
+                  <option value="Thaco">Thaco Trường Hải</option>
+                  <option value="Kim Long">Kim Long Motor</option>
+                  <option value="Hyundai">Hyundai Universe</option>
+                  <option value="Kia">Kia Granbird</option>
+                  <option value="Samco">Samco Felix</option>
+                  <option value="Ford">Ford Transit</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Ngày Đăng Kiểm Gần Nhất</label>
+                <input
+                  type="date"
+                  required
+                  value={vehicleRegDate}
+                  onChange={(e) => setVehicleRegDate(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Loại Xe & Sơ Đồ Thiết Kế</label>
+              <select
+                value={vehicleType}
+                onChange={(e) => setVehicleType(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-extrabold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer"
+              >
+                <option value="sleeper_22">VIP Cabin 22 Giường (2 Tầng)</option>
+                <option value="sleeper_34">VIP Cabin 34 Giường (2 Tầng)</option>
+                <option value="chair_45">Ghế ngồi 45 Chỗ (1 Tầng)</option>
+                <option value="limo_9">Limousine VIP 9 Ghế (1 Tầng)</option>
+                <option value="chair_16">Xe Khách Tiêu Chuẩn 16 Chỗ (1 Tầng)</option>
+              </select>
+            </div>
+
+            {vehicleRegDate && (
+              <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-xs space-y-1.5 font-sans">
+                <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span>Phân Tích Đăng Kiểm</span>
+                  <span>Tự Động Tính Toán</span>
+                </div>
+                {(() => {
+                  const reg = new Date(vehicleRegDate);
+                  const exp = new Date(reg.getFullYear() + 1, reg.getMonth(), reg.getDate());
+                  const today = new Date('2026-06-24');
+                  const diffTime = exp.getTime() - today.getTime();
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                  let badgeColor = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                  let warningText = "✅ Đội xe an toàn. Chưa đến hạn kiểm định đăng kiểm.";
+                  if (diffDays <= 0) {
+                    badgeColor = "bg-red-100 text-red-850 text-red-800 border-red-200 animate-pulse";
+                    warningText = "❌ ĐÃ QUÁ HẠN ĐĂNG KIỂM! Yêu cầu đưa phương tiện đi đăng kiểm khẩn cấp để đảm bảo điều kiện kinh doanh vận tải hành khách.";
+                  } else if (diffDays <= 30) {
+                    badgeColor = "bg-amber-100 text-amber-850 text-amber-800 border-amber-200 animate-pulse";
+                    warningText = `⚠️ CẢNH BÁO KIỂM ĐỊNH: Phương tiện sắp hết hạn đăng kiểm trong vòng ${diffDays} ngày! Cần lên lịch kiểm định trước ngày ${exp.toISOString().split('T')[0]}.`;
+                  }
+
+                  return (
+                    <>
+                      <div className="flex justify-between items-center py-1 border-b border-dashed border-slate-200">
+                        <span className="font-semibold text-slate-500">Ngày Hết Hạn đăng kiểm (12 tháng):</span>
+                        <span className="font-bold text-slate-800 font-mono">{exp.toISOString().split('T')[0]}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1">
+                        <span className="font-semibold text-slate-500">Thời gian còn lại:</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${badgeColor}`}>
+                          {diffDays <= 0 ? "Quá hạn" : `${diffDays} ngày`}
+                        </span>
+                      </div>
+                      <div className="pt-2 text-[10px] font-bold leading-relaxed text-slate-500">
+                        {warningText}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="submit"
+                disabled={savingVehicle}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase px-4 py-2.5 rounded-lg transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {savingVehicle ? 'Đang lưu...' : selectedVehicleForEdit ? '💾 Cập Nhật' : '➕ Thêm Vào Đội Xe'}
+              </button>
+              {selectedVehicleForEdit && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedVehicleForEdit(null);
+                    setVehiclePlates('');
+                    setVehicleBrand('Thaco');
+                    setVehicleType('sleeper_34');
+                    setVehicleRegDate(new Date().toISOString().split('T')[0]);
+                  }}
+                  className="px-4 py-2.5 border border-slate-300 hover:bg-slate-50 text-slate-600 text-xs font-extrabold rounded-lg transition-all cursor-pointer"
+                >
+                  Hủy
+                </button>
+              )}
+            </div>
+
+            {saveVehicleSuccess && (
+              <div className="bg-emerald-50 text-emerald-800 text-[11px] font-extrabold rounded-lg px-3 py-2 border border-emerald-150 flex items-center gap-1.5 animate-pulse">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span>Cập nhật thông tin đội xe thành công!</span>
+              </div>
+            )}
+          </form>
+        </div>
+
+        {/* LIVE PREVIEW OF SEATS LAYOUT */}
+        {renderVehicleLayout(vehicleType)}
+
+      </div>
+
+      {/* Right Column: Fleet List Table */}
+      <div className="xl:col-span-7 flex flex-col gap-6">
+        
+        {/* Fleet List Panel */}
+        <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-5 font-sans">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <Database className="w-5 h-5 text-red-600" />
+              <div>
+                <h3 className="font-extrabold text-sm text-slate-800 uppercase tracking-tight">Danh Sách Đội Xe Doanh Nghiệp ({vehicles.length})</h3>
+                <p className="text-[11px] text-slate-400">Danh sách biển số, tình trạng đăng kiểm định kỳ của nhà xe BH</p>
+              </div>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Tìm biển số, hãng xe..."
+                value={vehicleSearch}
+                onChange={(e) => setVehicleSearch(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-3 py-1.5 text-xs font-bold text-slate-700 w-full sm:w-48 focus:outline-none focus:ring-1 focus:ring-red-500"
+              />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+
+          {/* Warnings summary widget */}
+          {(() => {
+            const expiringSoonCount = vehicles.filter(v => {
+              const reg = new Date(v.registrationDate);
+              const exp = new Date(reg.getFullYear() + 1, reg.getMonth(), reg.getDate());
+              const diff = exp.getTime() - new Date('2026-06-24').getTime();
+              const diffDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
+              return diffDays > 0 && diffDays <= 30;
+            }).length;
+
+            const expiredCount = vehicles.filter(v => {
+              const reg = new Date(v.registrationDate);
+              const exp = new Date(reg.getFullYear() + 1, reg.getMonth(), reg.getDate());
+              const diff = exp.getTime() - new Date('2026-06-24').getTime();
+              const diffDays = Math.ceil(diff / (1000 * 60 * 60 * 24));
+              return diffDays <= 0;
+            }).length;
+
+            if (expiredCount > 0 || expiringSoonCount > 0) {
+              return (
+                <div className="mt-3 bg-red-50 border border-red-150 p-3 rounded-lg text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-extrabold text-red-800 uppercase text-[10px] tracking-wider">Hệ Thống Cảnh Báo Phương Tiện Giao Thông</p>
+                    <p className="text-red-700 font-bold leading-relaxed">
+                      Nhà xe ghi nhận <span className="underline decoration-2 font-black">{expiredCount} xe hết hạn</span> đăng kiểm và <span className="underline decoration-2 font-black">{expiringSoonCount} xe sắp hết hạn</span> kiểm định. Vui lòng cập nhật giấy đăng kiểm sớm!
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className="mt-3 bg-emerald-50 border border-emerald-100 p-3 rounded-lg text-xs flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-extrabold text-emerald-800 uppercase text-[10px] tracking-wider">Tình Trạng Kỹ Thuật Đội Xe</p>
+                  <p className="text-emerald-700 font-semibold leading-relaxed">
+                    Toàn bộ đội xe BH Bus Corporation đều hoạt động trong tình trạng an toàn, có giấy chứng nhận đăng kiểm còn thời hạn hợp lệ.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="overflow-x-auto mt-4 rounded-lg border border-slate-100">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-100 text-slate-400 font-bold">
+                  <th className="py-2.5 px-3">Biển Số Xe</th>
+                  <th className="py-2.5 px-3">Hãng Xe & Sức Chứa</th>
+                  <th className="py-2.5 px-3">Kiểm Định Gần Nhất</th>
+                  <th className="py-2.5 px-3">Hạn & Cảnh Báo</th>
+                  <th className="py-2.5 px-3 text-right">Thao Tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {vehicles.length > 0 ? (
+                  vehicles
+                    .filter(v => {
+                      const query = vehicleSearch.toLowerCase();
+                      return v.licensePlate.toLowerCase().includes(query) || v.brand.toLowerCase().includes(query);
+                    })
+                    .map(veh => {
+                      const reg = new Date(veh.registrationDate);
+                      const exp = new Date(reg.getFullYear() + 1, reg.getMonth(), reg.getDate());
+                      const today = new Date('2026-06-24');
+                      const diffTime = exp.getTime() - today.getTime();
+                      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                      let statusBadge = (
+                        <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-black px-2 py-0.5 rounded-md">
+                          Hợp Lệ
+                        </span>
+                      );
+                      if (diffDays <= 0) {
+                        statusBadge = (
+                          <span className="bg-red-100 text-red-850 text-red-800 border border-red-200 text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse">
+                            Hết Hạn
+                          </span>
+                        );
+                      } else if (diffDays <= 30) {
+                        statusBadge = (
+                          <span className="bg-amber-100 text-amber-850 text-amber-800 border border-amber-200 text-[10px] font-black px-2 py-0.5 rounded-md animate-pulse">
+                            Sắp Hết Hạn
+                          </span>
+                        );
+                      }
+
+                      return (
+                        <tr key={veh.licensePlate} className="hover:bg-slate-50/50 transition-colors font-semibold">
+                          <td className="py-3 px-3">
+                            <span className="font-mono font-bold text-slate-800 border-b border-slate-200 pb-0.5">{veh.licensePlate}</span>
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="text-slate-700 font-bold">{veh.brand}</div>
+                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                              {veh.vehicleType === 'sleeper_22' ? 'VIP 22 Cabin' :
+                               veh.vehicleType === 'sleeper_34' ? 'VIP 34 Cabin' :
+                               veh.vehicleType === 'chair_45' ? 'Ngồi 45 Chỗ' :
+                               veh.vehicleType === 'limo_9' ? 'Limo 9 Ghế' : 'Ngồi 16 Chỗ'}
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-slate-500 font-medium font-mono">
+                            {veh.registrationDate}
+                          </td>
+                          <td className="py-3 px-3">
+                            <div className="flex flex-col gap-1">
+                              <div className="font-bold text-slate-700 font-mono">{exp.toISOString().split('T')[0]}</div>
+                              <div className="flex items-center gap-1">
+                                {statusBadge}
+                                <span className="text-[10px] text-slate-400">
+                                  {diffDays <= 0 ? '(Trễ kiểm định)' : `(Còn ${diffDays} ngày)`}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleEditVehicle(veh)}
+                                className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 text-[10px] font-black px-2 py-1 rounded-md transition-colors cursor-pointer"
+                              >
+                                Sửa
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteVehicleSubmit(veh.licensePlate)}
+                                className="bg-red-50 hover:bg-red-100 border border-red-200 text-red-650 text-[10px] font-black px-2 py-1 rounded-md transition-colors cursor-pointer"
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="text-center py-6 text-slate-400 font-bold">
+                      Không tìm thấy phương tiện nào phù hợp!
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Cloud SQL schema creation logic */}
+        <div className="bg-slate-900 rounded-xl border border-slate-800 p-5 font-sans text-slate-300">
+          <div className="flex justify-between items-center pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <Database className="w-4 h-4 text-emerald-400" />
+              <span className="text-xs font-black uppercase text-slate-300 tracking-wider">Cơ sở dữ liệu Supabase Cloud SQL</span>
+            </div>
+            <button
+              onClick={copyVehicleSqlToClipboard}
+              className="bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-700 rounded-lg px-2.5 py-1 text-[10px] font-black transition-all flex items-center gap-1.5 cursor-pointer text-slate-400"
+            >
+              {copiedVehicleSql ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-emerald-500">Đã Copy!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy SQL Schema</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-2.5 text-xs text-slate-400">
+            <p className="leading-relaxed">
+              Để lưu trữ danh sách đội xe đồng bộ trực tuyến vĩnh viễn trên Supabase Cloud của bạn, hãy chạy câu lệnh SQL sau trong mục <span className="text-slate-200 font-bold">SQL Editor</span> trên giao diện điều khiển của Supabase:
+            </p>
+            <pre className="bg-slate-950 p-3 rounded-lg text-[10px] font-mono text-emerald-400 border border-slate-900 overflow-x-auto max-h-40 select-all">
+{`CREATE TABLE vehicles (
+  license_plate text PRIMARY KEY,
+  brand text NOT NULL,
+  vehicle_type text NOT NULL,
+  capacity integer NOT NULL,
+  registration_date text NOT NULL,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);`}
+            </pre>
+            <div className="flex items-center gap-2 bg-emerald-950/20 border border-emerald-900/30 p-2 rounded-lg text-[10px] text-emerald-400 font-semibold leading-normal">
+              <Server className="w-3.5 h-3.5 shrink-0" />
+              <span>Ứng dụng hỗ trợ cơ chế lưu trữ đệm in-memory RAM tự động khi bảng vehicles chưa được khởi tạo.</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  )}
+</div>
 );
 }

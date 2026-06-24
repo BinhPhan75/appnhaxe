@@ -79,3 +79,11 @@ export interface BusState {
   conductorPhone?: string;
   status?: 'active' | 'inactive';
 }
+
+export interface Vehicle {
+  licensePlate: string;
+  brand: string;
+  vehicleType: 'sleeper_22' | 'sleeper_34' | 'chair_45' | 'limo_9' | 'chair_16';
+  capacity: number;
+  registrationDate: string; // YYYY-MM-DD
+}

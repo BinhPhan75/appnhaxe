@@ -6,7 +6,8 @@ import {
   CustomerHistory, 
   SyncTransaction, 
   BerthStatus, 
-  Passenger
+  Passenger,
+  Vehicle
 } from './types';
 import { 
   VIETNAM_ROUTES, 
@@ -75,6 +76,7 @@ export default function App() {
   const [outbox, setOutbox] = useState<SyncTransaction[]>([]);
   const [customers, setCustomers] = useState<CustomerHistory[]>(MOCK_CUSTOMERS);
   const [buses, setBuses] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   // UI state
   const [selectedBerthForBooking, setSelectedBerthForBooking] = useState<{ id: string; label: string } | null>(null);
@@ -104,6 +106,7 @@ export default function App() {
         if (data.conductorName) setConductorName(data.conductorName);
         if (data.conductorPhone) setConductorPhone(data.conductorPhone);
         if (data.buses) setBuses(data.buses);
+        if (data.vehicles) setVehicles(data.vehicles);
 
         // Sync customized route inputs (startName, endName, waypoints, routeType, status) to selectedTrip state
         if (data.startName || data.endName || data.waypoints) {
@@ -444,6 +447,51 @@ export default function App() {
       }
     } catch (err) {
       console.warn("Could not delete dynamic route from server", err);
+    }
+  };
+
+  const handleSaveVehicle = async (vehicle: any) => {
+    if (isOffline) {
+      alert("Vui lòng bật mạng trực tuyến để lưu thông tin xe vào hệ thống!");
+      return;
+    }
+    try {
+      const res = await fetch('/api/vehicles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(vehicle)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.vehicles) {
+          setVehicles(data.vehicles);
+        }
+        playSuccessBeep();
+        fetchStateFromServer();
+      }
+    } catch (err) {
+      console.warn("Could not save vehicle:", err);
+    }
+  };
+
+  const handleDeleteVehicle = async (licensePlate: string) => {
+    if (isOffline) return;
+    try {
+      const res = await fetch('/api/vehicles/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licensePlate })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.vehicles) {
+          setVehicles(data.vehicles);
+        }
+        playSuccessBeep();
+        fetchStateFromServer();
+      }
+    } catch (err) {
+      console.warn("Could not delete vehicle:", err);
     }
   };
 
@@ -1028,6 +1076,9 @@ export default function App() {
             onSaveBusInfo={handleSaveBusInfo}
             onSelectTrip={handleTripChange}
             onDeleteTrip={handleDeleteTrip}
+            vehicles={vehicles}
+            onSaveVehicle={handleSaveVehicle}
+            onDeleteVehicle={handleDeleteVehicle}
           />
 
         )}
