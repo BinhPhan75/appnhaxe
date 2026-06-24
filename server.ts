@@ -910,8 +910,8 @@ app.get('/api/debug-vehicles', (req, res) => {
   });
 });
 
-// POST: Add or update a vehicle
-app.post('/api/vehicles', (req, res) => {
+// POST: Add or update a vehicle (supports both paths to prevent any client-side 404)
+const handleSaveVehicleRoute = (req: any, res: any) => {
   const { licensePlate, brand, vehicleType, capacity, registrationDate } = req.body;
   if (!licensePlate) {
     return res.status(400).json({ success: false, error: 'licensePlate is required' });
@@ -936,7 +936,10 @@ app.post('/api/vehicles', (req, res) => {
   saveVehicleToSupabase(vehicleObj);
 
   res.json({ success: true, vehicles });
-});
+};
+
+app.post('/api/vehicles', handleSaveVehicleRoute);
+app.post('/api/vehicles/save', handleSaveVehicleRoute);
 
 // POST: Delete a vehicle
 app.post('/api/vehicles/delete', (req, res) => {

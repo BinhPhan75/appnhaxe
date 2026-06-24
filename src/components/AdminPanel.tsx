@@ -709,7 +709,8 @@ CREATE TABLE vehicles (
                     const val = e.target.value;
                     if (val === 'CREATE_NEW') {
                       setIsCreatingNew(true);
-                      setPlates('51B-123.45');
+                      const firstVehiclePlate = vehicles && vehicles.length > 0 ? vehicles[0].licensePlate : '';
+                      setPlates(firstVehiclePlate);
                       setDriver('Tài xế bổ sung');
                       setDrPhone('0901230000');
                       setCond('Nội bộ nhà xe');
@@ -1001,39 +1002,31 @@ CREATE TABLE vehicles (
             </div>
 
             <div className="flex flex-col gap-1.5 font-sans">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Biển Số Xe (Kiểm Soát)</label>
-              <div className="relative flex gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    required
-                    value={plates}
-                    onChange={(e) => setPlates(e.target.value)}
-                    placeholder="Ví dụ: 51B-222.88"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500"
-                  />
-                  <Bus className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                </div>
-                {vehicles && vehicles.length > 0 && (
-                  <select
-                    value={vehicles.some(v => v.licensePlate === plates) ? plates : ''}
-                    onChange={(e) => {
-                      const selectedPlate = e.target.value;
-                      if (selectedPlate) {
-                        setPlates(selectedPlate);
-                      }
-                    }}
-                    className="bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg px-2 text-xs font-extrabold text-slate-700 cursor-pointer focus:outline-none focus:ring-1 focus:ring-red-500"
-                  >
-                    <option value="">-- Chọn từ Đội xe --</option>
-                    {vehicles.map(v => (
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Biển Số Xe (Chọn từ Đội Xe đã nhập)</label>
+              <div className="relative">
+                <select
+                  required
+                  value={plates}
+                  onChange={(e) => setPlates(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-8 py-2 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-500 cursor-pointer appearance-none"
+                >
+                  <option value="">-- Chọn biển số xe (Lấy từ Supabase) --</option>
+                  {vehicles && vehicles.length > 0 ? (
+                    vehicles.map(v => (
                       <option key={v.licensePlate} value={v.licensePlate}>
-                        {v.licensePlate} ({v.brand})
+                        {v.licensePlate} ({v.brand} - {v.capacity} Giường/Ghế)
                       </option>
-                    ))}
-                  </select>
-                )}
+                    ))
+                  ) : (
+                    <option value="" disabled>Chưa có xe nào trong đội xe! Hãy sang tab Đội Xe để thêm mới xe trước.</option>
+                  )}
+                </select>
+                <Bus className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 font-extrabold text-[10px]">▼</div>
               </div>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Danh sách xe được tải trực tiếp từ cơ sở dữ liệu Supabase. Bạn có thể sang tab <span className="font-extrabold text-red-650 cursor-pointer underline hover:text-red-700" onClick={() => setActiveAdminTab('fleet')}>Quản Lý Đội Xe</span> để cập nhật hoặc thêm mới xe.
+              </p>
               {(() => {
                 const vehicle = vehicles?.find(v => v.licensePlate === plates);
                 if (vehicle) {
