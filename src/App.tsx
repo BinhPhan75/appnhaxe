@@ -48,6 +48,37 @@ import {
   UserCog
 } from 'lucide-react';
 
+const DEFAULT_VEHICLES: Vehicle[] = [
+  {
+    licensePlate: '51B-222.88',
+    brand: 'Thaco',
+    vehicleType: 'sleeper_34',
+    capacity: 34,
+    registrationDate: '2025-07-15'
+  },
+  {
+    licensePlate: '65B-111.22',
+    brand: 'Kim Long',
+    vehicleType: 'sleeper_34',
+    capacity: 34,
+    registrationDate: '2025-06-01'
+  },
+  {
+    licensePlate: '79B-888.99',
+    brand: 'Hyundai',
+    vehicleType: 'sleeper_34',
+    capacity: 34,
+    registrationDate: '2025-08-20'
+  },
+  {
+    licensePlate: '51B-999.99',
+    brand: 'Kia',
+    vehicleType: 'sleeper_22',
+    capacity: 22,
+    registrationDate: '2026-06-10'
+  }
+];
+
 export default function App() {
   // Roles toggles: 'conductor' (phụ xe), 'dispatcher' (điều hành bến) or 'admin' (quản trị nhà xe)
   const [activeRole, setActiveRole] = useState<'conductor' | 'dispatcher' | 'admin'>('conductor');
@@ -76,7 +107,7 @@ export default function App() {
   const [outbox, setOutbox] = useState<SyncTransaction[]>([]);
   const [customers, setCustomers] = useState<CustomerHistory[]>(MOCK_CUSTOMERS);
   const [buses, setBuses] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>(DEFAULT_VEHICLES);
 
   // UI state
   const [selectedBerthForBooking, setSelectedBerthForBooking] = useState<{ id: string; label: string } | null>(null);
@@ -160,6 +191,14 @@ export default function App() {
     const savedOutbox = localStorage.getItem('BH_SYNC_OUTBOX');
     if (savedOutbox) {
       setOutbox(JSON.parse(savedOutbox));
+    }
+    const savedVehicles = localStorage.getItem('BH_VEHICLES');
+    if (savedVehicles) {
+      try {
+        setVehicles(JSON.parse(savedVehicles));
+      } catch (err) {
+        console.warn("Could not parse cached vehicles:", err);
+      }
     }
   }, []);
 
@@ -456,7 +495,17 @@ export default function App() {
 
   const handleSaveVehicle = async (vehicle: any) => {
     if (isOffline) {
-      alert("Vui lòng bật mạng trực tuyến để lưu thông tin xe vào hệ thống!");
+      // Offline mode support: save directly to local state and local storage
+      const existingIdx = vehicles.findIndex(v => v.licensePlate === vehicle.licensePlate);
+      let updatedVehicles = [...vehicles];
+      if (existingIdx !== -1) {
+        updatedVehicles[existingIdx] = vehicle;
+      } else {
+        updatedVehicles.push(vehicle);
+      }
+      setVehicles(updatedVehicles);
+      localStorage.setItem('BH_VEHICLES', JSON.stringify(updatedVehicles));
+      playSuccessBeep();
       return;
     }
     try {
@@ -469,17 +518,30 @@ export default function App() {
         const data = await res.json();
         if (data.vehicles) {
           setVehicles(data.vehicles);
+          localStorage.setItem('BH_VEHICLES', JSON.stringify(data.vehicles));
         }
         playSuccessBeep();
         fetchStateFromServer();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server returned error code ${res.status}`);
       }
-    } catch (err) {
-      console.warn("Could not save vehicle:", err);
+    } catch (err: any) {
+      console.warn("Could not save vehicle to server:", err);
+      alert(`Lỗi đăng ký xe: ${err.message || err}`);
+      throw err; // Rethrow to prevent form reset and fake success overlay
     }
   };
 
   const handleDeleteVehicle = async (licensePlate: string) => {
-    if (isOffline) return;
+    if (isOffline) {
+      // Offline mode support: delete directly from local state and local storage
+      const updatedVehicles = vehicles.filter(v => v.licensePlate !== licensePlate);
+      setVehicles(updatedVehicles);
+      localStorage.setItem('BH_VEHICLES', JSON.stringify(updatedVehicles));
+      playSuccessBeep();
+      return;
+    }
     try {
       const res = await fetch('/api/vehicles/delete', {
         method: 'POST',
@@ -490,12 +552,18 @@ export default function App() {
         const data = await res.json();
         if (data.vehicles) {
           setVehicles(data.vehicles);
+          localStorage.setItem('BH_VEHICLES', JSON.stringify(data.vehicles));
         }
         playSuccessBeep();
         fetchStateFromServer();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Server returned error code ${res.status}`);
       }
-    } catch (err) {
-      console.warn("Could not delete vehicle:", err);
+    } catch (err: any) {
+      console.warn("Could not delete vehicle from server:", err);
+      alert(`Lỗi xóa xe: ${err.message || err}`);
+      throw err; // Rethrow to prevent fake success actions
     }
   };
 

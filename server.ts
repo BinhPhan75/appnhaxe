@@ -573,6 +573,7 @@ async function syncVehiclesFromSupabase() {
   if (!supabase) return;
   try {
     const { data, error } = await supabase.from('vehicles').select('*');
+    console.log('[DEBUG syncVehicles] Supabase SELECT vehicles result:', { data, error });
     if (error) {
       if (error.code === '42P01' || (error.message && error.message.includes('not found'))) {
         isVehiclesTableMissing = true;
@@ -590,18 +591,21 @@ async function syncVehiclesFromSupabase() {
         capacity: Number(v.capacity),
         registrationDate: v.registration_date
       }));
-      console.log(`Loaded ${data.length} vehicles from Supabase.`);
+      console.log(`Loaded ${data.length} vehicles from Supabase:`, vehicles);
     } else {
       // Seed defaults
-      console.log('Seeding default vehicles to Supabase...');
+      console.log('Seeding default vehicles to Supabase...', vehicles);
       for (const v of vehicles) {
-        await supabase.from('vehicles').insert([{
+        const { error: insError } = await supabase.from('vehicles').insert([{
           license_plate: v.licensePlate,
           brand: v.brand,
           vehicle_type: v.vehicleType,
           capacity: v.capacity,
           registration_date: v.registrationDate
         }]);
+        if (insError) {
+          console.warn(`⚠️ Seed vehicle insert failed for ${v.licensePlate}:`, insError.message);
+        }
       }
     }
   } catch (err: any) {
@@ -876,6 +880,16 @@ app.get('/api/state', (req, res) => {
 // GET: Fetch all registered vehicles
 app.get('/api/vehicles', (req, res) => {
   res.json(vehicles);
+});
+
+// GET: Debug vehicles state
+app.get('/api/debug-vehicles', (req, res) => {
+  res.json({
+    vehiclesLength: vehicles ? vehicles.length : null,
+    vehicles: vehicles,
+    isVehiclesTableMissing: isVehiclesTableMissing,
+    supabaseConfigured: !!supabase
+  });
 });
 
 // POST: Add or update a vehicle
