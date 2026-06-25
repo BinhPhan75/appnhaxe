@@ -187,6 +187,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }).addTo(mapRef.current!);
     });
 
+    if (!routePolylinesRef.current[tripConfig.id] && tripConfig.waypoints.length > 0) {
+      const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
+      routePolylinesRef.current[tripConfig.id] = L.polyline(coordsList, {
+        color: '#dc2626',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '5, 8'
+      }).addTo(mapRef.current);
+    }
+
     // Setup Start and end markers for focused route
     L.marker([tripConfig.startCoords.lat, tripConfig.startCoords.lng])
       .bindPopup(`<p className="font-bold text-xs text-slate-800">Khởi Hành: ${tripConfig.waypoints[0]?.name || 'Bến Đi'}</p>`)
@@ -217,10 +227,27 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Update Polyline when waypoints are customized
   useEffect(() => {
-    const currentPolyLine = routePolylinesRef.current[tripConfig.id];
-    if (!mapRef.current || !currentPolyLine) return;
+    if (!mapRef.current || !tripConfig.waypoints.length) return;
     const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
+    let currentPolyLine = routePolylinesRef.current[tripConfig.id];
+
+    if (!currentPolyLine) {
+      currentPolyLine = L.polyline(coordsList, {
+        color: '#dc2626',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '5, 8'
+      }).addTo(mapRef.current);
+      routePolylinesRef.current[tripConfig.id] = currentPolyLine;
+    }
+
     currentPolyLine.setLatLngs(coordsList);
+    try {
+      const bounds = L.latLngBounds(coordsList);
+      mapRef.current.fitBounds(bounds, { padding: [30, 30] });
+    } catch (e) {
+      // Ignored
+    }
   }, [tripConfig.waypoints, tripConfig.id]);
 
   // Update client position and entire fleet of buses on map

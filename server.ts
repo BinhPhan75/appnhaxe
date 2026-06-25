@@ -221,35 +221,37 @@ function generateWaypointsByRoute(
     const normal = { lat: -lngDelta, lng: latDelta };
     const normalLength = Math.max(Math.hypot(normal.lat, normal.lng), 1);
     const normalized = { lat: normal.lat / normalLength, lng: normal.lng / normalLength };
+    const routeDistance = Math.max(getDistanceKm(startCoords.lat, startCoords.lng, endCoords.lat, endCoords.lng), 1);
+    const distanceScale = Math.min(Math.max(routeDistance / 450, 0.7), 1.8);
     const bend = (ratio: number, scale: number) => ({
-      lat: startCoords.lat + latDelta * ratio + normalized.lat * scale,
-      lng: startCoords.lng + lngDelta * ratio + normalized.lng * scale
+      lat: startCoords.lat + latDelta * ratio + normalized.lat * scale * distanceScale,
+      lng: startCoords.lng + lngDelta * ratio + normalized.lng * scale * distanceScale
     });
 
     if (routeType === 'expressway') {
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
-        { name: 'Cao Tốc: Vào Nút Giao Liên Tỉnh', coords: bend(0.22, -0.03) },
-        { name: 'Cao Tốc: Trạm Dừng Chân Tiện Nghi', coords: bend(0.50, -0.015) },
-        { name: 'Cao Tốc: Ra Nút Giao Gần Bến', coords: bend(0.78, -0.03) },
+        { name: 'Cao Tốc: Vào Nút Giao Liên Tỉnh', coords: bend(0.22, -0.08) },
+        { name: 'Cao Tốc: Trạm Dừng Chân Tiện Nghi', coords: bend(0.50, -0.04) },
+        { name: 'Cao Tốc: Ra Nút Giao Gần Bến', coords: bend(0.78, -0.08) },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     } else if (routeType === 'other') {
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
-        { name: 'Tuyến Khác: Đường Tỉnh Lộ Nhánh Tránh', coords: bend(0.20, 0.12) },
-        { name: 'Tuyến Khác: Đường Kết Nối Khu Dân Cư', coords: bend(0.45, -0.085) },
-        { name: 'Tuyến Khác: Trạm Nghỉ Điểm Du Lịch Địa Phương', coords: bend(0.68, 0.115) },
-        { name: 'Tuyến Khác: Đường Nhánh Vào Bến', coords: bend(0.86, -0.055) },
+        { name: 'Tuyến Khác: Đường Tỉnh Lộ Nhánh Tránh', coords: bend(0.20, 0.28) },
+        { name: 'Tuyến Khác: Đường Kết Nối Khu Dân Cư', coords: bend(0.45, -0.22) },
+        { name: 'Tuyến Khác: Trạm Nghỉ Điểm Du Lịch Địa Phương', coords: bend(0.68, 0.26) },
+        { name: 'Tuyến Khác: Đường Nhánh Vào Bến', coords: bend(0.86, -0.14) },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     } else { // national_highway
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
-        { name: 'Quốc Lộ: Trạm Thu Phí Đầu Tuyến', coords: bend(0.18, 0.035) },
-        { name: 'Quốc Lộ: Trạm Dừng Kiểm Soát Hành Trình', coords: bend(0.42, -0.02) },
-        { name: 'Quốc Lộ: Trạm Dừng Chân Ăn Uống', coords: bend(0.63, 0.025) },
-        { name: 'Quốc Lộ: Văn Phòng Đại Diện Tuyến', coords: bend(0.82, -0.012) },
+        { name: 'Quốc Lộ: Trạm Thu Phí Đầu Tuyến', coords: bend(0.18, 0.16) },
+        { name: 'Quốc Lộ: Trạm Dừng Kiểm Soát Hành Trình', coords: bend(0.42, -0.08) },
+        { name: 'Quốc Lộ: Trạm Dừng Chân Ăn Uống', coords: bend(0.63, 0.12) },
+        { name: 'Quốc Lộ: Văn Phòng Đại Diện Tuyến', coords: bend(0.82, -0.05) },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     }

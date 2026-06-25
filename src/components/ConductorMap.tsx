@@ -106,6 +106,20 @@ export const ConductorMap: React.FC<ConductorMapProps> = ({
     };
   }, [tripConfig.id]);
 
+  useEffect(() => {
+    if (!mapRef.current || !routePolylineRef.current || !tripConfig.waypoints.length) return;
+
+    const coordsList = tripConfig.waypoints.map(wp => [wp.coords.lat, wp.coords.lng] as [number, number]);
+    routePolylineRef.current.setLatLngs(coordsList);
+
+    try {
+      const bounds = L.latLngBounds(coordsList);
+      mapRef.current.fitBounds(bounds, { padding: [25, 25] });
+    } catch (e) {
+      // safe ignore
+    }
+  }, [tripConfig.waypoints]);
+
   // 2. Render dynamic locations (the bus + passengers pickups & dropoffs)
   useEffect(() => {
     if (!mapRef.current) return;

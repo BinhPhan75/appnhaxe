@@ -93,7 +93,9 @@ const buildDynamicWaypoints = (
   const normal = { lat: -lngDelta, lng: latDelta };
   const normalLength = Math.max(Math.hypot(normal.lat, normal.lng), 1);
   const normalized = { lat: normal.lat / normalLength, lng: normal.lng / normalLength };
-  const offsetScale = routeType === 'expressway' ? -0.045 : routeType === 'other' ? 0.12 : 0.035;
+  const routeDistance = Math.max(getDistanceKm(startCoords.lat, startCoords.lng, endCoords.lat, endCoords.lng), 1);
+  const distanceScale = Math.min(Math.max(routeDistance / 450, 0.7), 1.8);
+  const offsetScale = (routeType === 'expressway' ? -0.12 : routeType === 'other' ? 0.28 : 0.16) * distanceScale;
   const bend = (ratio: number, multiplier = 1) => ({
     lat: startCoords.lat + latDelta * ratio + normalized.lat * offsetScale * multiplier,
     lng: startCoords.lng + lngDelta * ratio + normalized.lng * offsetScale * multiplier
