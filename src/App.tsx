@@ -21,6 +21,7 @@ import {
   playSuccessBeep, 
   speakVietnamese 
 } from './utils/audioAlert';
+import { getBrowserSupabase, getMissingBrowserSupabaseMessage } from './utils/supabaseBrowser';
 import { BerthMap } from './components/BerthMap';
 import { PassengerModal } from './components/PassengerModal';
 import { Dashboard } from './components/Dashboard';
@@ -78,6 +79,43 @@ const DEFAULT_VEHICLES: Vehicle[] = [
     registrationDate: '2026-06-10'
   }
 ];
+
+const buildDynamicWaypoints = (
+  startName: string,
+  endName: string,
+  routeType: string,
+  startCoords: { lat: number; lng: number },
+  endCoords: { lat: number; lng: number }
+) => {
+  const routeLabel = routeType === 'expressway' ? 'Cao tốc' : routeType === 'other' ? 'Tuyến tránh' : 'Quốc lộ';
+  const points = [
+    { name: `${startName} (Xuất phát)`, coords: startCoords },
+    {
+      name: `${routeLabel} - Trạm trung chuyển 1`,
+      coords: {
+        lat: startCoords.lat * 0.67 + endCoords.lat * 0.33,
+        lng: startCoords.lng * 0.67 + endCoords.lng * 0.33
+      }
+    },
+    {
+      name: `${routeLabel} - Trạm trung chuyển 2`,
+      coords: {
+        lat: startCoords.lat * 0.34 + endCoords.lat * 0.66,
+        lng: startCoords.lng * 0.34 + endCoords.lng * 0.66
+      }
+    },
+    { name: `${endName} (Đích đến)`, coords: endCoords }
+  ];
+
+  let cumulativeDistance = 0;
+  return points.map((point, index) => {
+    if (index > 0) {
+      const prev = points[index - 1].coords;
+      cumulativeDistance += Math.round(getDistanceKm(prev.lat, prev.lng, point.coords.lat, point.coords.lng));
+    }
+    return { ...point, distanceKm: cumulativeDistance };
+  });
+};
 
 export default function App() {
   // Roles toggles: 'conductor' (phụ xe), 'dispatcher' (điều hành bến) or 'admin' (quản trị nhà xe)
@@ -382,6 +420,123 @@ export default function App() {
     }
   };
 
+  const upsertVehicleLocally = (vehicle: Vehicle) => {
+    const existingIdx = vehicles.findIndex(v => v.licensePlate === vehicle.licensePlate);
+    const updatedVehicles = [...vehicles];
+    if (existingIdx !== -1) {
+      updatedVehicles[existingIdx] = vehicle;
+    } else {
+      updatedVehicles.push(vehicle);
+    }
+    setVehicles(updatedVehicles);
+    localStorage.setItem('BH_VEHICLES', JSON.stringify(updatedVehicles));
+    return updatedVehicles;
+  };
+
+  const saveVehicleDirectlyToSupabase = async (vehicle: Vehicle) => {
+    const supabase = getBrowserSupabase();
+    if (!supabase) {
+      throw new Error(getMissingBrowserSupabaseMessage());
+    }
+
+    const { error } = await supabase.from('vehicles').upsert({
+      license_plate: vehicle.licensePlate,
+      brand: vehicle.brand,
+      vehicle_type: vehicle.vehicleType,
+      capacity: vehicle.capacity,
+      registration_date: vehicle.registrationDate
+    }, { onConflict: 'license_plate' });
+
+    if (error) throw new Error(error.message);
+    return upsertVehicleLocally(vehicle);
+  };
+
+  const saveBusDirectlyToSupabase = async (info: {
+    tripId: string;
+    licensePlate: string;
+    driverName: string;
+    driverPhone: string;
+    conductorName: string;
+    conductorPhone: string;
+    startName?: string;
+    endName?: string;
+    routeType?: string;
+    startCoords?: { lat: number; lng: number };
+    endCoords?: { lat: number; lng: number };
+    status?: 'active' | 'inactive';
+    layoutCapacity?: number;
+  }) => {
+    const supabase = getBrowserSupabase();
+    if (!supabase) {
+      throw new Error(getMissingBrowserSupabaseMessage());
+    }
+
+    const startName = info.startName || 'Bến xuất phát';
+    const endName = info.endName || 'Bến đích đến';
+    const routeType = info.routeType || 'national_highway';
+    const startCoords = info.startCoords || { lat: 10.7494, lng: 106.6171 };
+    const endCoords = info.endCoords || { lat: 11.9333, lng: 108.4503 };
+    const waypoints = buildDynamicWaypoints(startName, endName, routeType, startCoords, endCoords);
+    const routeStatus = info.status || 'active';
+    const routeBus = {
+      tripId: info.tripId,
+      layoutCapacity: info.layoutCapacity || 34,
+      currentLocation: waypoints[0]?.coords || startCoords,
+      speed: routeStatus === 'inactive' ? 0 : 60,
+      isSimulating: routeStatus !== 'inactive',
+      isOffline: routeStatus === 'inactive',
+      simulationProgress: 0,
+      licensePlate: info.licensePlate,
+      driverName: info.driverName,
+      driverPhone: info.driverPhone,
+      conductorName: info.conductorName,
+      conductorPhone: info.conductorPhone,
+      startName,
+      endName,
+      routeType,
+      status: routeStatus,
+      startCoords,
+      endCoords,
+      waypoints,
+      berths: generateInitialBerths(info.layoutCapacity || 34)
+    };
+
+    const { error } = await supabase.from('bus_routes').upsert({
+      trip_id: routeBus.tripId,
+      layout_capacity: routeBus.layoutCapacity,
+      current_location: routeBus.currentLocation,
+      speed: routeBus.speed,
+      is_simulating: routeBus.isSimulating,
+      is_offline: routeBus.isOffline,
+      simulation_progress: routeBus.simulationProgress,
+      license_plate: routeBus.licensePlate,
+      driver_name: routeBus.driverName,
+      driver_phone: routeBus.driverPhone,
+      conductor_name: routeBus.conductorName,
+      conductor_phone: routeBus.conductorPhone,
+      start_name: routeBus.startName,
+      end_name: routeBus.endName,
+      route_type: routeBus.routeType,
+      status: routeBus.status,
+      start_coords: routeBus.startCoords,
+      end_coords: routeBus.endCoords,
+      waypoints: routeBus.waypoints,
+      berths: routeBus.berths
+    }, { onConflict: 'trip_id' });
+
+    if (error) throw new Error(error.message);
+
+    const existingIdx = buses.findIndex(b => b.tripId === routeBus.tripId);
+    const updatedBuses = [...buses];
+    if (existingIdx !== -1) {
+      updatedBuses[existingIdx] = routeBus;
+    } else {
+      updatedBuses.push(routeBus);
+    }
+    setBuses(updatedBuses);
+    return updatedBuses;
+  };
+
   const handleSaveBusInfo = async (info: {
     tripId: string;
     licensePlate: string;
@@ -457,9 +612,19 @@ export default function App() {
           playSuccessBeep();
           fetchStateFromServer();
           return data.buses;
+        } else {
+          if (res.status === 404) {
+            const fallbackBuses = await saveBusDirectlyToSupabase(info);
+            playSuccessBeep();
+            return fallbackBuses;
+          }
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || `Server returned error code ${res.status}`);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Could not save bus info to server", err);
+        alert(`Lỗi lưu tuyến hành trình: ${err.message || err}`);
+        throw err;
       }
     }
     return undefined;
@@ -523,6 +688,11 @@ export default function App() {
         playSuccessBeep();
         fetchStateFromServer();
       } else {
+        if (res.status === 404) {
+          await saveVehicleDirectlyToSupabase(vehicle);
+          playSuccessBeep();
+          return;
+        }
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || `Server returned error code ${res.status}`);
       }

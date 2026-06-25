@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import 'dotenv/config';
 import { createServer as createViteServer } from 'vite';
 import { createClient } from '@supabase/supabase-js';
 import { VIETNAM_ROUTES, getPositionOnRoute, getDistanceKm } from './src/utils/mockData';
@@ -26,13 +27,15 @@ if (rawSupabaseUrl) {
 }
 const SUPABASE_URL = rawSupabaseUrl;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_KEY = SUPABASE_SERVICE_ROLE_KEY || SUPABASE_ANON_KEY;
 
-const supabase = (SUPABASE_URL && SUPABASE_ANON_KEY) 
-  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)  
+const supabase = (SUPABASE_URL && SUPABASE_KEY) 
+  ? createClient(SUPABASE_URL, SUPABASE_KEY)  
   : null;
 
 if (supabase) {
-  console.log('✅ Supabase client loaded successfully for backend persistence.');
+  console.log(`✅ Supabase client loaded successfully for backend persistence (${SUPABASE_SERVICE_ROLE_KEY ? 'service role' : 'anon key'}).`);
 } else {
   console.warn('⚠️ Supabase credentials missing/incomplete in environment. Falling back to RAM persistence.');
 }
@@ -483,8 +486,8 @@ async function syncBusesFromSupabase() {
   }
 }
 
-async function saveBusToSupabase(bus: any) {
-  if (!supabase) return;
+async function saveBusToSupabase(bus: any): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  if (!supabase) return { ok: true, skipped: true };
   try {
     const { error } = await supabase
       .from('bus_routes')
@@ -513,14 +516,18 @@ async function saveBusToSupabase(bus: any) {
     if (error) {
       if (checkAndHandleTableError(error, 'bus_routes')) {
         console.log(`ℹ️ [Supabase Info] Bảng 'bus_routes' chưa tồn tại. Không thể lưu tuyến xe ${bus.tripId} lên Supabase.`);
+        return { ok: false, error: "Bảng bus_routes chưa tồn tại trong Supabase. Hãy chạy SQL schema trong Admin Panel." };
       } else {
         console.warn(`Error saving bus route ${bus.tripId} to Supabase:`, error.message);
+        return { ok: false, error: error.message };
       }
     } else {
       console.log(`Successfully saved/synced bus route ${bus.tripId} into Supabase!`);
+      return { ok: true };
     }
   } catch (err: any) {
     console.warn('Exception saving bus to Supabase:', err.message);
+    return { ok: false, error: err.message || String(err) };
   }
 }
 
@@ -631,18 +638,38 @@ async function syncVehiclesFromSupabase() {
   }
 }
 
-async function saveVehicleToSupabase(v: any) {
-  if (!supabase || isVehiclesTableMissing) return;
+async function saveVehicleToSupabase(v: any): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  if (!supabase) return { ok: true, skipped: true };
+  if (isVehiclesTableMissing) {
+    return { ok: false, error: "Bảng vehicles chưa tồn tại trong Supabase. Hãy chạy SQL schema trong Admin Panel." };
+  }
   try {
-    await supabase.from('vehicles').upsert({
+    const { error } = await supabase.from('vehicles').upsert({
       license_plate: v.licensePlate,
       brand: v.brand,
       vehicle_type: v.vehicleType,
       capacity: v.capacity,
       registration_date: v.registrationDate
     }, { onConflict: 'license_plate' });
+    if (error) {
+      const isMissing = error.code === '42P01' ||
+        (error.message && (
+          error.message.includes('relation') ||
+          error.message.includes('does not exist') ||
+          error.message.includes('schema cache') ||
+          error.message.includes('not found')
+        ));
+      if (isMissing) {
+        isVehiclesTableMissing = true;
+        return { ok: false, error: "Bảng vehicles chưa tồn tại trong Supabase. Hãy chạy SQL schema trong Admin Panel." };
+      }
+      console.warn(`Error saving vehicle ${v.licensePlate} to Supabase:`, error.message);
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
   } catch (err: any) {
     console.warn('Exception saving vehicle to Supabase:', err.message);
+    return { ok: false, error: err.message || String(err) };
   }
 }
 
@@ -911,13 +938,14 @@ app.get('/api/debug-vehicles', (req, res) => {
 });
 
 // POST: Add or update a vehicle (supports both paths to prevent any client-side 404)
-const handleSaveVehicleRoute = (req: any, res: any) => {
+const handleSaveVehicleRoute = async (req: any, res: any) => {
   const { licensePlate, brand, vehicleType, capacity, registrationDate } = req.body;
   if (!licensePlate) {
     return res.status(400).json({ success: false, error: 'licensePlate is required' });
   }
 
   const existingIdx = vehicles.findIndex(v => v.licensePlate === licensePlate);
+  const previousVehicles = [...vehicles];
   const vehicleObj = {
     licensePlate,
     brand: brand || 'Thaco',
@@ -933,7 +961,14 @@ const handleSaveVehicleRoute = (req: any, res: any) => {
   }
 
   // Persist to Supabase
-  saveVehicleToSupabase(vehicleObj);
+  const saveResult = await saveVehicleToSupabase(vehicleObj);
+  if (!saveResult.ok) {
+    vehicles = previousVehicles;
+    return res.status(502).json({
+      success: false,
+      error: saveResult.error || 'Không thể lưu xe lên Supabase.'
+    });
+  }
 
   res.json({ success: true, vehicles });
 };
@@ -1224,7 +1259,7 @@ app.get('/api/customer-logs', async (req, res) => {
 });
 
 // POST: Save driver name, conductor name, license plate, etc.
-app.post('/api/bus-info', (req, res) => {
+app.post('/api/bus-info', async (req, res) => {
   const { 
     licensePlate, 
     driverName, 
@@ -1244,6 +1279,8 @@ app.post('/api/bus-info', (req, res) => {
   } = req.body;
   const targetTripId = tripId || busState.tripId;
   let activeBus = buses[targetTripId];
+  const previousBus = activeBus ? { ...activeBus, berths: [...(activeBus.berths || [])], waypoints: [...(activeBus.waypoints || [])] } : undefined;
+  const hadExistingBus = !!activeBus;
 
   if (!activeBus) {
     const finalCapacity = layoutCapacity ? Number(layoutCapacity) : 34;
@@ -1330,7 +1367,21 @@ app.post('/api/bus-info', (req, res) => {
   }
 
   // Persist created or updated bus to Supabase
-  saveBusToSupabase(activeBus);
+  const saveResult = await saveBusToSupabase(activeBus);
+  if (!saveResult.ok) {
+    if (hadExistingBus && previousBus) {
+      buses[targetTripId] = previousBus;
+      if (busState.tripId === targetTripId) {
+        busState = previousBus;
+      }
+    } else {
+      delete buses[targetTripId];
+    }
+    return res.status(502).json({
+      success: false,
+      error: saveResult.error || 'Không thể lưu tuyến xe lên Supabase.'
+    });
+  }
 
   res.json({ success: true, state: activeBus, buses: Object.values(buses) });
 });
