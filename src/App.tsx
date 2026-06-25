@@ -88,22 +88,41 @@ const buildDynamicWaypoints = (
   endCoords: { lat: number; lng: number }
 ) => {
   const routeLabel = routeType === 'expressway' ? 'Cao tốc' : routeType === 'other' ? 'Tuyến tránh' : 'Quốc lộ';
+  const latDelta = endCoords.lat - startCoords.lat;
+  const lngDelta = endCoords.lng - startCoords.lng;
+  const normal = { lat: -lngDelta, lng: latDelta };
+  const normalLength = Math.max(Math.hypot(normal.lat, normal.lng), 1);
+  const normalized = { lat: normal.lat / normalLength, lng: normal.lng / normalLength };
+  const offsetScale = routeType === 'expressway' ? -0.045 : routeType === 'other' ? 0.12 : 0.035;
+  const bend = (ratio: number, multiplier = 1) => ({
+    lat: startCoords.lat + latDelta * ratio + normalized.lat * offsetScale * multiplier,
+    lng: startCoords.lng + lngDelta * ratio + normalized.lng * offsetScale * multiplier
+  });
+
+  const intermediate =
+    routeType === 'expressway'
+      ? [
+          { name: 'Vào nút giao cao tốc liên tỉnh', coords: bend(0.22, 0.7) },
+          { name: 'Trạm dừng cao tốc', coords: bend(0.5, 0.35) },
+          { name: 'Ra nút giao cao tốc gần bến', coords: bend(0.78, 0.7) }
+        ]
+      : routeType === 'other'
+        ? [
+            { name: 'Tuyến tránh ngoại ô', coords: bend(0.2, 1.2) },
+            { name: 'Đường tỉnh lộ kết nối', coords: bend(0.45, -0.85) },
+            { name: 'Trạm nghỉ tuyến phụ', coords: bend(0.68, 1.15) },
+            { name: 'Đường nhánh vào bến', coords: bend(0.86, -0.55) }
+          ]
+        : [
+            { name: 'Quốc lộ - trạm thu phí đầu tuyến', coords: bend(0.18) },
+            { name: 'Quốc lộ - trạm dừng kiểm soát', coords: bend(0.42, -0.45) },
+            { name: 'Quốc lộ - trạm nghỉ trung tuyến', coords: bend(0.63, 0.55) },
+            { name: 'Quốc lộ - văn phòng đại diện tuyến', coords: bend(0.82, -0.25) }
+          ];
+
   const points = [
     { name: `${startName} (Xuất phát)`, coords: startCoords },
-    {
-      name: `${routeLabel} - Trạm trung chuyển 1`,
-      coords: {
-        lat: startCoords.lat * 0.67 + endCoords.lat * 0.33,
-        lng: startCoords.lng * 0.67 + endCoords.lng * 0.33
-      }
-    },
-    {
-      name: `${routeLabel} - Trạm trung chuyển 2`,
-      coords: {
-        lat: startCoords.lat * 0.34 + endCoords.lat * 0.66,
-        lng: startCoords.lng * 0.34 + endCoords.lng * 0.66
-      }
-    },
+    ...intermediate.map(point => ({ ...point, name: `${routeLabel}: ${point.name}` })),
     { name: `${endName} (Đích đến)`, coords: endCoords }
   ];
 

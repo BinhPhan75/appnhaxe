@@ -216,29 +216,40 @@ function generateWaypointsByRoute(
     }
   } else {
     // Completely dynamic routing for newly added route!
+    const latDelta = endCoords.lat - startCoords.lat;
+    const lngDelta = endCoords.lng - startCoords.lng;
+    const normal = { lat: -lngDelta, lng: latDelta };
+    const normalLength = Math.max(Math.hypot(normal.lat, normal.lng), 1);
+    const normalized = { lat: normal.lat / normalLength, lng: normal.lng / normalLength };
+    const bend = (ratio: number, scale: number) => ({
+      lat: startCoords.lat + latDelta * ratio + normalized.lat * scale,
+      lng: startCoords.lng + lngDelta * ratio + normalized.lng * scale
+    });
+
     if (routeType === 'expressway') {
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
-        { name: 'Vào Tuyến Cao Tốc Liên Tỉnh', coords: { lat: startCoords.lat * 0.75 + endCoords.lat * 0.25, lng: startCoords.lng * 0.75 + endCoords.lng * 0.25 } },
-        { name: 'Trạm Dừng Chân Cao Tốc Tiện Nghi', coords: { lat: startCoords.lat * 0.5 + endCoords.lat * 0.5, lng: startCoords.lng * 0.5 + endCoords.lng * 0.5 } },
-        { name: 'Nút Giao Cao Tốc Rẽ Chuẩn Bị Vào Bến', coords: { lat: startCoords.lat * 0.25 + endCoords.lat * 0.75, lng: startCoords.lng * 0.25 + endCoords.lng * 0.75 } },
+        { name: 'Cao Tốc: Vào Nút Giao Liên Tỉnh', coords: bend(0.22, -0.03) },
+        { name: 'Cao Tốc: Trạm Dừng Chân Tiện Nghi', coords: bend(0.50, -0.015) },
+        { name: 'Cao Tốc: Ra Nút Giao Gần Bến', coords: bend(0.78, -0.03) },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     } else if (routeType === 'other') {
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
-        { name: 'Đường Tỉnh Lộ Nhánh Tránh', coords: { lat: startCoords.lat * 0.75 + endCoords.lat * 0.25 + 0.05, lng: startCoords.lng * 0.75 + endCoords.lng * 0.25 - 0.06 } },
-        { name: 'Trạm Nghỉ Điểm Du Lịch Địa Phương', coords: { lat: startCoords.lat * 0.5 + endCoords.lat * 0.5 - 0.04, lng: startCoords.lng * 0.5 + endCoords.lng * 0.5 + 0.07 } },
-        { name: 'Điểm Kiểm Kiểm Soát Lộ Trình Phụ', coords: { lat: startCoords.lat * 0.25 + endCoords.lat * 0.75 + 0.02, lng: startCoords.lng * 0.25 + endCoords.lng * 0.75 - 0.03 } },
+        { name: 'Tuyến Khác: Đường Tỉnh Lộ Nhánh Tránh', coords: bend(0.20, 0.12) },
+        { name: 'Tuyến Khác: Đường Kết Nối Khu Dân Cư', coords: bend(0.45, -0.085) },
+        { name: 'Tuyến Khác: Trạm Nghỉ Điểm Du Lịch Địa Phương', coords: bend(0.68, 0.115) },
+        { name: 'Tuyến Khác: Đường Nhánh Vào Bến', coords: bend(0.86, -0.055) },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     } else { // national_highway
       coordsList = [
         { name: `${startName} (Xuất phát)`, coords: startCoords },
-        { name: 'Trạm Thu Phí Quốc Lộ', coords: { lat: startCoords.lat * 0.8 + endCoords.lat * 0.2, lng: startCoords.lng * 0.8 + endCoords.lng * 0.2 } },
-        { name: 'Trạm Dừng Kiểm Soát Hành Trình', coords: { lat: startCoords.lat * 0.6 + endCoords.lat * 0.4, lng: startCoords.lng * 0.6 + endCoords.lng * 0.4 } },
-        { name: 'Trạm Dừng Chân Ăn Uống Quốc Lộ', coords: { lat: startCoords.lat * 0.4 + endCoords.lat * 0.6, lng: startCoords.lng * 0.4 + endCoords.lng * 0.6 } },
-        { name: 'Văn Phòng Đại Diện Tuyến', coords: { lat: startCoords.lat * 0.2 + endCoords.lat * 0.8, lng: startCoords.lng * 0.2 + endCoords.lng * 0.8 } },
+        { name: 'Quốc Lộ: Trạm Thu Phí Đầu Tuyến', coords: bend(0.18, 0.035) },
+        { name: 'Quốc Lộ: Trạm Dừng Kiểm Soát Hành Trình', coords: bend(0.42, -0.02) },
+        { name: 'Quốc Lộ: Trạm Dừng Chân Ăn Uống', coords: bend(0.63, 0.025) },
+        { name: 'Quốc Lộ: Văn Phòng Đại Diện Tuyến', coords: bend(0.82, -0.012) },
         { name: `${endName} (Đích đến)`, coords: endCoords }
       ];
     }

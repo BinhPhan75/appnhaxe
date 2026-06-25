@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TripConfig, Waypoint, Passenger } from '../types';
 import { MapPin, Phone, User, X, Check, Search, Calendar, IdCard } from 'lucide-react';
+import { getDistanceKm } from '../utils/mockData';
 
 interface PassengerModalProps {
   berthLabel: string;
@@ -9,6 +10,49 @@ interface PassengerModalProps {
   onClose: () => void;
   onSave: (passenger: Passenger) => void;
 }
+
+const MAP_PLACE_SUGGESTIONS: Waypoint[] = [
+  { name: 'Bến xe Quy Nhơn (Bình Định)', coords: { lat: 13.7820, lng: 109.2205 }, distanceKm: 0 },
+  { name: 'Bến xe Trung Tâm Đà Nẵng', coords: { lat: 16.0544, lng: 108.2022 }, distanceKm: 0 },
+  { name: 'Bến xe Phía Nam Nha Trang', coords: { lat: 12.2224, lng: 109.1672 }, distanceKm: 0 },
+  { name: 'Thành Phố Cam Ranh (Khánh Hòa)', coords: { lat: 11.9161, lng: 109.1412 }, distanceKm: 0 },
+  { name: 'Phan Rang - Tháp Chàm (Ninh Thuận)', coords: { lat: 11.5684, lng: 108.9904 }, distanceKm: 0 },
+  { name: 'Trạm Phan Thiết (Bình Thuận)', coords: { lat: 10.9322, lng: 108.1011 }, distanceKm: 0 },
+  { name: 'Bến xe Vũng Tàu', coords: { lat: 10.3460, lng: 107.0843 }, distanceKm: 0 },
+  { name: 'Bến xe Liên Tỉnh Đà Lạt', coords: { lat: 11.9333, lng: 108.4503 }, distanceKm: 0 },
+  { name: 'Văn phòng Bảo Lộc (Lâm Đồng)', coords: { lat: 11.5434, lng: 107.8031 }, distanceKm: 0 },
+  { name: 'Bến xe Trung Tâm Cần Thơ', coords: { lat: 10.0152, lng: 105.7487 }, distanceKm: 0 },
+  { name: 'Bến xe Mỹ Đình (Hà Nội)', coords: { lat: 21.0285, lng: 105.7783 }, distanceKm: 0 },
+  { name: 'Bến xe Giáp Bát (Hà Nội)', coords: { lat: 20.9791, lng: 105.8402 }, distanceKm: 0 },
+  { name: 'Bến xe Sa Pa (Lào Cai)', coords: { lat: 22.3364, lng: 103.8438 }, distanceKm: 0 },
+  { name: 'Bến xe Trung tâm Buôn Ma Thuột (Đắk Lắk)', coords: { lat: 12.6667, lng: 108.0500 }, distanceKm: 0 },
+  { name: 'Bến xe Rạch Giá (Kiên Giang)', coords: { lat: 10.0124, lng: 105.0809 }, distanceKm: 0 }
+];
+
+const normalizeSearchText = (value: string) =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
+
+const buildMapSuggestions = (tripConfig: TripConfig, query = '') => {
+  const start = tripConfig.waypoints[0]?.coords || tripConfig.startCoords;
+  const merged = [...(tripConfig.waypoints || []), ...MAP_PLACE_SUGGESTIONS];
+  const byName = new Map<string, Waypoint>();
+
+  merged.forEach((point) => {
+    const distanceKm = point.distanceKm || Math.round(getDistanceKm(start.lat, start.lng, point.coords.lat, point.coords.lng));
+    byName.set(normalizeSearchText(point.name), { ...point, distanceKm });
+  });
+
+  const normalizedQuery = normalizeSearchText(query.trim());
+  const list = Array.from(byName.values())
+    .filter(point => !normalizedQuery || normalizeSearchText(point.name).includes(normalizedQuery))
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  return normalizedQuery ? list.slice(0, 8) : list.slice(0, 10);
+};
 
 export const PassengerModal: React.FC<PassengerModalProps> = ({
   berthLabel,
@@ -31,7 +75,7 @@ export const PassengerModal: React.FC<PassengerModalProps> = ({
   // Generate initial suggestions based on current route waypoints
   useEffect(() => {
     if (tripConfig && tripConfig.waypoints) {
-      setSuggestions(tripConfig.waypoints);
+      setSuggestions(buildMapSuggestions(tripConfig));
     }
   }, [tripConfig]);
 
@@ -41,14 +85,13 @@ export const PassengerModal: React.FC<PassengerModalProps> = ({
 
     // Search matches from tripConfig waypoints first, or general stops
     if (!val.trim()) {
-      setSuggestions(tripConfig.waypoints);
+      setSuggestions(buildMapSuggestions(tripConfig));
+      setSelectedCoords(null);
       return;
     }
 
-    const filtered = tripConfig.waypoints.filter(w => 
-      w.name.toLowerCase().includes(val.toLowerCase())
-    );
-    setSuggestions(filtered);
+    setSelectedCoords(null);
+    setSuggestions(buildMapSuggestions(tripConfig, val));
   };
 
   const handleSelectSuggestion = (waypoint: Waypoint) => {
@@ -70,7 +113,8 @@ export const PassengerModal: React.FC<PassengerModalProps> = ({
     }
 
     // Default coordinate if no suggestion matched: midpoint of the route or close to end
-    const coords = selectedCoords || tripConfig.waypoints[tripConfig.waypoints.length - 1].coords;
+    const typedMatch = buildMapSuggestions(tripConfig, destination)[0];
+    const coords = selectedCoords || typedMatch?.coords || tripConfig.waypoints[tripConfig.waypoints.length - 1].coords;
 
     onSave({
       name: name.trim(),
